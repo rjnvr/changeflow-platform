@@ -83,6 +83,14 @@ function getRouteMeta(pathname: string) {
     } as const;
   }
 
+  if (pathname.startsWith("/app/api-docs")) {
+    return {
+      title: "API Docs",
+      activeTab: "resources",
+      searchPlaceholder: null
+    } as const;
+  }
+
   if (
     pathname.startsWith("/app/dashboard") ||
     pathname.startsWith("/app/budget") ||

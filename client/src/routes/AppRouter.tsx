@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 
 import { AppLayout } from "../components/layout/AppLayout";
+import { ApiDocsPage } from "../pages/ApiDocsPage";
 import { BudgetPage } from "../pages/BudgetPage";
 import { ChangeOrderDetailsPage } from "../pages/ChangeOrderDetailsPage";
 import { ChangeOrdersPage } from "../pages/ChangeOrdersPage";
@@ -27,6 +28,7 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       <Route path="/" element={<HomePage />} />
+      <Route path="/api-docs" element={<ApiDocsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/app" element={<AppLayout />}>
@@ -41,6 +43,7 @@ const router = createBrowserRouter(
           <Route path="team" element={<TeamPage />} />
           <Route path="directory" element={<DirectoryPage />} />
           <Route path="resources" element={<ResourcesPage />} />
+          <Route path="api-docs" element={<ApiDocsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
         </Route>
       </Route>

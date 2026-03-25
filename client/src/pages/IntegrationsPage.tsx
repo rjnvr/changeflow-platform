@@ -72,6 +72,8 @@ function toCsvValue(value: string) {
 }
 
 function FooterLinks() {
+  const navigate = useNavigate();
+
   return (
     <Box
       sx={{
@@ -88,11 +90,16 @@ function FooterLinks() {
         © 2024 ChangeFlow Intelligence. Built for the modern jobsite.
       </Typography>
       <Stack direction="row" spacing={3.5} useFlexGap flexWrap="wrap">
-        {["Terms", "Privacy", "Trust & Security", "API Docs"].map((item) => (
+        {["Terms", "Privacy", "Trust & Security"].map((item) => (
           <Typography key={item} sx={{ fontSize: "0.82rem", letterSpacing: 2.2, textTransform: "uppercase" }}>
             {item}
           </Typography>
         ))}
+        <ButtonBase onClick={() => navigate("/app/api-docs")} sx={{ color: "inherit" }}>
+          <Typography sx={{ fontSize: "0.82rem", letterSpacing: 2.2, textTransform: "uppercase", fontWeight: 700 }}>
+            API Docs
+          </Typography>
+        </ButtonBase>
       </Stack>
     </Box>
   );
@@ -717,7 +724,7 @@ export function IntegrationsPage() {
               Read our detailed architectural documentation for custom field mapping and sync audit flows.
             </Typography>
 
-            <ButtonBase onClick={() => navigate("/app/resources?panel=api-docs")} sx={{ mt: 4, color: "#FFFFFF" }}>
+            <ButtonBase onClick={() => navigate("/app/api-docs")} sx={{ mt: 4, color: "#FFFFFF" }}>
               <Stack direction="row" spacing={1.2} alignItems="center">
                 <Typography
                   sx={{

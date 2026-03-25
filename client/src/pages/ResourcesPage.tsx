@@ -191,7 +191,7 @@ export function ResourcesPage() {
             {
               title: "Local Setup Notes",
               body: "Use the repo docs to run the app locally, seed demo data, and connect optional APIs later.",
-              to: "/app/resources?panel=api-docs"
+              to: "/app/api-docs"
             }
           ]
             .filter((card) => {
@@ -424,6 +424,47 @@ export function ResourcesPage() {
             gap: 2.5
           }}
         >
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3.2,
+              borderRadius: 4,
+              background: "linear-gradient(135deg, #00342B 0%, #004D40 100%)",
+              color: "#FFFFFF",
+              gridColumn: { xs: "auto", lg: "1 / -1" }
+            }}
+          >
+            <Typography
+              sx={{
+                fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                fontSize: { xs: "2rem", md: "2.4rem" },
+                fontWeight: 800,
+                letterSpacing: -1.2
+              }}
+            >
+              Need the full reference?
+            </Typography>
+            <Typography sx={{ mt: 1.2, maxWidth: 760, fontSize: "1rem", lineHeight: 1.7, color: "rgba(255,255,255,0.78)" }}>
+              Open the dedicated API docs page for live endpoint groups, request examples, response envelopes,
+              upload flow notes, and webhook guidance.
+            </Typography>
+            <ButtonBase
+              onClick={() => navigate("/app/api-docs")}
+              sx={{
+                mt: 2.2,
+                px: 2.2,
+                py: 1.2,
+                borderRadius: 2.5,
+                backgroundColor: "#9DEFDE",
+                color: "#00342B"
+              }}
+            >
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>Open API Docs Page</Typography>
+                <OpenInNewRoundedIcon sx={{ fontSize: 18 }} />
+              </Stack>
+            </ButtonBase>
+          </Paper>
           {[
             {
               title: "Local Docs",
