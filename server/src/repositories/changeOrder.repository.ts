@@ -39,6 +39,13 @@ const changeOrderClient = (prisma as unknown as {
   };
 }).changeOrder;
 
+const changeOrderAttachmentClient = (prisma as unknown as {
+  changeOrderAttachment: {
+    findFirst(args: unknown): Promise<ChangeOrderAttachmentRow | null>;
+    delete(args: unknown): Promise<ChangeOrderAttachmentRow>;
+  };
+}).changeOrderAttachment;
+
 function mapChangeOrderAttachment(attachment: ChangeOrderAttachmentRow): ChangeOrderAttachmentRecord {
   return {
     id: attachment.id,
@@ -279,5 +286,78 @@ export const changeOrderRepository = {
     });
 
     return mapChangeOrder(archived);
+  },
+  async findAttachment(changeOrderId: string, attachmentId: string) {
+    const attachment = await changeOrderAttachmentClient.findFirst({
+      where: {
+        id: attachmentId,
+        changeOrderId
+      }
+    });
+
+    return attachment ? mapChangeOrderAttachment(attachment) : null;
+  },
+  async addAttachments(
+    changeOrderId: string,
+    attachments: Array<{
+      title: string;
+      storageKey: string;
+      fileName: string;
+      contentType: string;
+      fileSize: number;
+    }>
+  ) {
+    const existing = await changeOrderClient.findUnique({
+      where: { id: changeOrderId },
+      include: {
+        attachments: {
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = await changeOrderClient.update({
+      where: { id: changeOrderId },
+      data: {
+        attachments: {
+          create: attachments.map((attachment) => ({
+            title: attachment.title,
+            storageKey: attachment.storageKey,
+            fileName: attachment.fileName,
+            contentType: attachment.contentType,
+            fileSize: attachment.fileSize
+          }))
+        }
+      },
+      include: {
+        attachments: {
+          orderBy: [{ createdAt: "asc" }]
+        }
+      }
+    });
+
+    return mapChangeOrder(updated);
+  },
+  async deleteAttachment(changeOrderId: string, attachmentId: string) {
+    const existing = await changeOrderAttachmentClient.findFirst({
+      where: {
+        id: attachmentId,
+        changeOrderId
+      }
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const deleted = await changeOrderAttachmentClient.delete({
+      where: { id: attachmentId }
+    });
+
+    return mapChangeOrderAttachment(deleted);
   }
 };

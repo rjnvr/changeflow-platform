@@ -43,6 +43,23 @@ export const createChangeOrderAttachmentUploadIntentSchema = z.object({
   })
 });
 
+export const addChangeOrderAttachmentsSchema = z.object({
+  body: z.object({
+    attachments: z
+      .array(
+        z.object({
+          title: z.string().min(1).max(160),
+          storageKey: z.string().min(5).max(512),
+          fileName: z.string().min(1).max(255),
+          contentType: z.string().min(1).max(120),
+          fileSize: z.number().int().positive().max(25 * 1024 * 1024)
+        })
+      )
+      .min(1)
+      .max(10)
+  })
+});
+
 export const createChangeOrderCommentSchema = z.object({
   body: z.object({
     authorName: z.string().min(2).max(120),

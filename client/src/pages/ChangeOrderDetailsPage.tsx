@@ -1,3 +1,4 @@
+import type { ChangeEvent } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
@@ -6,15 +7,21 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
   addChangeOrderComment,
+  addChangeOrderAttachments,
   archiveChangeOrder,
+  createChangeOrderAttachmentUploadIntent,
+  deleteChangeOrderAttachment,
   getChangeOrder,
+  getChangeOrderAttachmentDownloadUrl,
   getChangeOrderActivity,
   getChangeOrderComments,
   updateChangeOrderStatus
@@ -60,7 +67,9 @@ function activityLabel(activity: ChangeOrderActivityItem) {
     "change_order.created": "Change order created",
     "change_order.status_updated": "Status updated",
     "change_order.comment_added": "Comment added",
-    "change_order.imported": "Imported into pipeline"
+    "change_order.imported": "Imported into pipeline",
+    "change_order.attachments_added": "Attachments added",
+    "change_order.attachment_deleted": "Attachment removed"
   };
 
   return labels[activity.action] ?? activity.action.replaceAll("_", " ");
@@ -83,6 +92,14 @@ function activityDescription(activity: ChangeOrderActivityItem) {
     return `Assigned to ${activity.metadata.assignedTo}.`;
   }
 
+  if (activity.action === "change_order.attachments_added" && Array.isArray(activity.metadata.fileNames)) {
+    return `${activity.metadata.fileNames.join(", ")} added to the record.`;
+  }
+
+  if (activity.action === "change_order.attachment_deleted" && typeof activity.metadata.fileName === "string") {
+    return `${activity.metadata.fileName} removed from the record.`;
+  }
+
   return Object.entries(activity.metadata)
     .map(([key, value]) => `${key}: ${String(value)}`)
     .join(" • ");
@@ -93,12 +110,17 @@ export function ChangeOrderDetailsPage() {
   const { changeOrderId = "" } = useParams();
   const { user } = useAuthContext();
   const { projects } = useProjects({ includeArchived: true });
+  const uploadInputId = useId();
   const [changeOrder, setChangeOrder] = useState<ChangeOrder | null>(null);
   const [comments, setComments] = useState<ChangeOrderComment[]>([]);
   const [activity, setActivity] = useState<ChangeOrderActivityItem[]>([]);
   const [commentBody, setCommentBody] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<ChangeOrder["status"] | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -139,6 +161,125 @@ export function ChangeOrderDetailsPage() {
   useEffect(() => {
     refresh().catch(() => undefined);
   }, [changeOrderId]);
+
+  function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
+    setPendingFiles(Array.from(event.target.files ?? []));
+  }
+
+  async function handleUploadAttachments() {
+    if (!changeOrder || pendingFiles.length === 0) {
+      return;
+    }
+
+    setUploadingAttachments(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const uploadedAttachments = [];
+
+      for (const file of pendingFiles) {
+        const uploadIntent = await createChangeOrderAttachmentUploadIntent({
+          projectId: changeOrder.projectId,
+          fileName: file.name,
+          contentType: file.type || undefined,
+          fileSize: file.size
+        });
+
+        const uploadResponse = await fetch(uploadIntent.uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": uploadIntent.contentType
+          },
+          body: file
+        });
+
+        if (!uploadResponse.ok) {
+          const responseBody = (await uploadResponse.text()).replace(/\s+/g, " ").trim();
+          throw new Error(
+            `Unable to upload ${file.name} to storage (status ${uploadResponse.status}). ${
+              responseBody || "S3 rejected the upload request."
+            }`
+          );
+        }
+
+        uploadedAttachments.push({
+          title: file.name,
+          storageKey: uploadIntent.storageKey,
+          fileName: uploadIntent.fileName,
+          contentType: uploadIntent.contentType,
+          fileSize: uploadIntent.fileSize
+        });
+      }
+
+      const updatedChangeOrder = await addChangeOrderAttachments(changeOrder.id, {
+        attachments: uploadedAttachments
+      });
+
+      setChangeOrder(updatedChangeOrder);
+      setPendingFiles([]);
+      setActivity(await getChangeOrderActivity(changeOrder.id));
+      setMessage(`${uploadedAttachments.length} attachment${uploadedAttachments.length === 1 ? "" : "s"} added.`);
+    } catch (requestError) {
+      if (requestError instanceof TypeError) {
+        setError("The browser could not upload the attachments. Check your S3 bucket CORS settings for http://localhost:5173.");
+      } else {
+        setError(requestError instanceof Error ? requestError.message : "Unable to upload attachments.");
+      }
+    } finally {
+      setUploadingAttachments(false);
+    }
+  }
+
+  async function handleOpenAttachment(attachmentId: string) {
+    if (!changeOrder) {
+      return;
+    }
+
+    setOpeningAttachmentId(attachmentId);
+    setError("");
+
+    try {
+      const response = await getChangeOrderAttachmentDownloadUrl(changeOrder.id, attachmentId);
+      window.open(response.url, "_blank", "noopener,noreferrer");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to open attachment.");
+    } finally {
+      setOpeningAttachmentId(null);
+    }
+  }
+
+  async function handleDeleteAttachment(attachmentId: string, fileName: string) {
+    if (!changeOrder) {
+      return;
+    }
+
+    if (!window.confirm(`Remove ${fileName} from this change order?`)) {
+      return;
+    }
+
+    setDeletingAttachmentId(attachmentId);
+    setMessage("");
+    setError("");
+
+    try {
+      await deleteChangeOrderAttachment(changeOrder.id, attachmentId);
+      setChangeOrder((current) =>
+        current
+          ? {
+              ...current,
+              attachments: current.attachments.filter((attachment) => attachment.id !== attachmentId)
+            }
+          : current
+      );
+      setActivity(await getChangeOrderActivity(changeOrder.id));
+      setMessage("Attachment removed.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to remove attachment.");
+    } finally {
+      setDeletingAttachmentId(null);
+    }
+  }
 
   async function handleStatusUpdate(status: ChangeOrder["status"]) {
     if (!changeOrder) {
@@ -336,15 +477,119 @@ export function ChangeOrderDetailsPage() {
           </Paper>
 
           <Paper elevation={0} sx={{ p: 3.4, borderRadius: 4, backgroundColor: "#FFFFFF" }}>
-            <Typography sx={{ fontSize: "1.45rem", fontWeight: 800, color: "#00342B" }}>Attachments</Typography>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              gap={2}
+            >
+              <Typography sx={{ fontSize: "1.45rem", fontWeight: 800, color: "#00342B" }}>Attachments</Typography>
+              {canManageChangeOrder ? (
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
+                  <input
+                    id={uploadInputId}
+                    type="file"
+                    hidden
+                    multiple
+                    onChange={handleAttachmentSelection}
+                    accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx,.zip"
+                  />
+                  <ButtonBase
+                    component="label"
+                    htmlFor={uploadInputId}
+                    sx={{
+                      px: 2,
+                      py: 1.1,
+                      borderRadius: 2.5,
+                      backgroundColor: "#E6F6FF",
+                      color: "#00342B"
+                    }}
+                  >
+                    <Stack direction="row" spacing={0.8} alignItems="center">
+                      <CloudUploadRoundedIcon sx={{ fontSize: 18 }} />
+                      <Typography sx={{ fontSize: "0.88rem", fontWeight: 800 }}>
+                        {pendingFiles.length > 0 ? `${pendingFiles.length} selected` : "Select files"}
+                      </Typography>
+                    </Stack>
+                  </ButtonBase>
+                  <ButtonBase
+                    onClick={handleUploadAttachments}
+                    disabled={uploadingAttachments || pendingFiles.length === 0}
+                    sx={{
+                      px: 2,
+                      py: 1.1,
+                      borderRadius: 2.5,
+                      backgroundColor: "#00342B",
+                      color: "#FFFFFF",
+                      opacity: uploadingAttachments || pendingFiles.length === 0 ? 0.6 : 1
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.88rem", fontWeight: 800 }}>
+                      {uploadingAttachments ? "Uploading..." : "Add attachments"}
+                    </Typography>
+                  </ButtonBase>
+                </Stack>
+              ) : null}
+            </Stack>
+            {pendingFiles.length > 0 ? (
+              <Typography sx={{ mt: 1.4, fontSize: "0.84rem", color: "#5A6A84" }}>
+                Ready to upload: {pendingFiles.map((file) => file.name).join(", ")}
+              </Typography>
+            ) : null}
             <Stack spacing={1.4} sx={{ mt: 2.4 }}>
               {changeOrder.attachments.length > 0 ? (
                 changeOrder.attachments.map((attachment) => (
                   <Box key={attachment.id} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#F3FAFF" }}>
-                    <Typography sx={{ fontSize: "0.96rem", fontWeight: 800, color: "#00342B" }}>{attachment.fileName}</Typography>
-                    <Typography sx={{ mt: 0.4, fontSize: "0.86rem", color: "#5A6A84" }}>
-                      {attachment.contentType} • {formatFileSize(attachment.fileSize)}
-                    </Typography>
+                    <Stack direction="row" justifyContent="space-between" gap={2} flexWrap="wrap">
+                      <Box>
+                        <Typography sx={{ fontSize: "0.96rem", fontWeight: 800, color: "#00342B" }}>
+                          {attachment.fileName}
+                        </Typography>
+                        <Typography sx={{ mt: 0.4, fontSize: "0.86rem", color: "#5A6A84" }}>
+                          {attachment.contentType} • {formatFileSize(attachment.fileSize)}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                        <ButtonBase
+                          onClick={() => handleOpenAttachment(attachment.id)}
+                          sx={{
+                            px: 1.8,
+                            py: 0.9,
+                            borderRadius: 2.5,
+                            backgroundColor: "#E6F6FF",
+                            color: "#00342B"
+                          }}
+                        >
+                          <Stack direction="row" spacing={0.8} alignItems="center">
+                            <OpenInNewRoundedIcon sx={{ fontSize: 16 }} />
+                            <Typography sx={{ fontSize: "0.82rem", fontWeight: 800 }}>
+                              {openingAttachmentId === attachment.id ? "Opening..." : "Open"}
+                            </Typography>
+                          </Stack>
+                        </ButtonBase>
+                        {canManageChangeOrder ? (
+                          <ButtonBase
+                            onClick={() => handleDeleteAttachment(attachment.id, attachment.fileName)}
+                            disabled={deletingAttachmentId === attachment.id}
+                            sx={{
+                              px: 1.8,
+                              py: 0.9,
+                              borderRadius: 2.5,
+                              backgroundColor: "#FFF1EE",
+                              color: "#872000",
+                              opacity: deletingAttachmentId === attachment.id ? 0.6 : 1
+                            }}
+                          >
+                            <Stack direction="row" spacing={0.8} alignItems="center">
+                              <DeleteOutlineRoundedIcon sx={{ fontSize: 16 }} />
+                              <Typography sx={{ fontSize: "0.82rem", fontWeight: 800 }}>
+                                {deletingAttachmentId === attachment.id ? "Removing..." : "Remove"}
+                              </Typography>
+                            </Stack>
+                          </ButtonBase>
+                        ) : null}
+                      </Stack>
+                    </Stack>
                   </Box>
                 ))
               ) : (
@@ -357,7 +602,7 @@ export function ChangeOrderDetailsPage() {
 
           <Paper elevation={0} sx={{ p: 3.4, borderRadius: 4, backgroundColor: "#FFFFFF" }}>
             <Typography sx={{ fontSize: "1.45rem", fontWeight: 800, color: "#00342B" }}>Review Thread</Typography>
-            {!canManageChangeOrder ? (
+            {changeOrder.archivedAt || project?.archivedAt ? (
               <Alert severity="info" sx={{ mt: 2.2 }}>
                 Comments are locked once a change order is archived.
               </Alert>

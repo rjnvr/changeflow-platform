@@ -238,6 +238,99 @@ export const changeOrderService = {
 
     return storageService.createChangeOrderAttachmentUploadIntent(input);
   },
+  async addAttachments(
+    user: AuthenticatedUser,
+    changeOrderId: string,
+    input: {
+      attachments: Array<{
+        title: string;
+        storageKey: string;
+        fileName: string;
+        contentType: string;
+        fileSize: number;
+      }>;
+    }
+  ) {
+    if (input.attachments.length === 0) {
+      throw new ApiError(400, "Add at least one attachment.");
+    }
+
+    const changeOrder = await this.getChangeOrder(changeOrderId);
+    const project = await projectRepository.findById(changeOrder.projectId);
+
+    if (!project) {
+      throw new ApiError(404, "Project not found.");
+    }
+
+    if (!canEditProject(user, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner can manage change order attachments.");
+    }
+
+    if (project.archivedAt || changeOrder.archivedAt) {
+      throw new ApiError(400, "Archived change orders are read-only.");
+    }
+
+    const updatedChangeOrder = await changeOrderRepository.addAttachments(changeOrderId, input.attachments);
+
+    if (!updatedChangeOrder) {
+      throw new ApiError(404, "Change order not found.");
+    }
+
+    await auditLogService.record("change_order.attachments_added", "change_order", updatedChangeOrder.id, {
+      count: input.attachments.length,
+      fileNames: input.attachments.map((attachment) => attachment.fileName)
+    });
+
+    return updatedChangeOrder;
+  },
+  async getAttachmentDownloadUrl(changeOrderId: string, attachmentId: string) {
+    await this.getChangeOrder(changeOrderId);
+
+    const attachment = await changeOrderRepository.findAttachment(changeOrderId, attachmentId);
+
+    if (!attachment) {
+      throw new ApiError(404, "Attachment not found.");
+    }
+
+    return {
+      url: await storageService.createDownloadUrl({
+        storageKey: attachment.storageKey,
+        fileName: attachment.fileName,
+        contentType: attachment.contentType
+      })
+    };
+  },
+  async removeAttachment(user: AuthenticatedUser, changeOrderId: string, attachmentId: string) {
+    const changeOrder = await this.getChangeOrder(changeOrderId);
+    const project = await projectRepository.findById(changeOrder.projectId);
+
+    if (!project) {
+      throw new ApiError(404, "Project not found.");
+    }
+
+    if (!canEditProject(user, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner can manage change order attachments.");
+    }
+
+    if (project.archivedAt || changeOrder.archivedAt) {
+      throw new ApiError(400, "Archived change orders are read-only.");
+    }
+
+    const deletedAttachment = await changeOrderRepository.deleteAttachment(changeOrderId, attachmentId);
+
+    if (!deletedAttachment) {
+      throw new ApiError(404, "Attachment not found.");
+    }
+
+    await storageService.deleteObject(deletedAttachment.storageKey);
+
+    await auditLogService.record("change_order.attachment_deleted", "change_order", changeOrderId, {
+      fileName: deletedAttachment.fileName,
+      attachmentId: deletedAttachment.id
+    });
+
+    return deletedAttachment;
+  },
   async updateChangeOrder(
     user: AuthenticatedUser,
     changeOrderId: string,

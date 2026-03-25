@@ -5,6 +5,7 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
+  addChangeOrderAttachmentsSchema,
   createChangeOrderAttachmentUploadIntentSchema,
   createChangeOrderCommentSchema,
   createChangeOrderSchema,
@@ -21,6 +22,19 @@ changeOrderRouter.post(
   "/upload-intent",
   validate(createChangeOrderAttachmentUploadIntentSchema),
   asyncHandler(changeOrderController.createAttachmentUploadIntent)
+);
+changeOrderRouter.post(
+  "/:changeOrderId/attachments",
+  validate(addChangeOrderAttachmentsSchema),
+  asyncHandler(changeOrderController.addAttachments)
+);
+changeOrderRouter.get(
+  "/:changeOrderId/attachments/:attachmentId/download-url",
+  asyncHandler(changeOrderController.getAttachmentDownloadUrl)
+);
+changeOrderRouter.delete(
+  "/:changeOrderId/attachments/:attachmentId",
+  asyncHandler(changeOrderController.removeAttachment)
 );
 changeOrderRouter.post("/import", validate(importChangeOrdersSchema), asyncHandler(changeOrderController.import));
 changeOrderRouter.post("/", validate(createChangeOrderSchema), asyncHandler(changeOrderController.create));

@@ -67,6 +67,35 @@ export const changeOrderController = {
       data: await changeOrderService.createAttachmentUploadIntent(request.body)
     });
   },
+  async addAttachments(request: Request, response: Response) {
+    response.status(201).json({
+      success: true,
+      data: await changeOrderService.addAttachments(
+        request.user!,
+        getRouteParam(request.params.changeOrderId),
+        request.body
+      )
+    });
+  },
+  async getAttachmentDownloadUrl(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await changeOrderService.getAttachmentDownloadUrl(
+        getRouteParam(request.params.changeOrderId),
+        getRouteParam(request.params.attachmentId)
+      )
+    });
+  },
+  async removeAttachment(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await changeOrderService.removeAttachment(
+        request.user!,
+        getRouteParam(request.params.changeOrderId),
+        getRouteParam(request.params.attachmentId)
+      )
+    });
+  },
   async import(request: Request, response: Response) {
     response.status(201).json({
       success: true,

@@ -111,6 +111,34 @@ export function createChangeOrderAttachmentUploadIntent(input: {
   });
 }
 
+export function addChangeOrderAttachments(
+  changeOrderId: string,
+  input: {
+    attachments: Array<{
+      title: string;
+      storageKey: string;
+      fileName: string;
+      contentType: string;
+      fileSize: number;
+    }>;
+  }
+) {
+  return apiRequest<ChangeOrder>(`/change-orders/${changeOrderId}/attachments`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getChangeOrderAttachmentDownloadUrl(changeOrderId: string, attachmentId: string) {
+  return apiRequest<{ url: string }>(`/change-orders/${changeOrderId}/attachments/${attachmentId}/download-url`);
+}
+
+export function deleteChangeOrderAttachment(changeOrderId: string, attachmentId: string) {
+  return apiRequest<{ id: string }>(`/change-orders/${changeOrderId}/attachments/${attachmentId}`, {
+    method: "DELETE"
+  });
+}
+
 export function importChangeOrders(
   changeOrders: Array<{
     projectId: string;
