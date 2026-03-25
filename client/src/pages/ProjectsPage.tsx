@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CalendarTodayRoundedIcon from "@mui/icons-material/CalendarTodayRounded";
 import FavoriteRoundedIcon from "@mui/icons-material/FavoriteRounded";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
@@ -6,87 +8,116 @@ import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
+import Checkbox from "@mui/material/Checkbox";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
+import { BulkProjectActionsModal } from "../components/projects/BulkProjectActionsModal";
+import { CreateProjectModal } from "../components/projects/CreateProjectModal";
+import { useAuthContext } from "../context/AuthContext";
 import { useProjects } from "../hooks/useProjects";
+import type { Project } from "../types/project";
+import { formatCurrency } from "../utils/formatCurrency";
 
-const portfolioCards = [
-  {
+type PortfolioTone = "success" | "danger" | "neutral";
+
+interface ProjectPresentation {
+  sector: string;
+  client: string;
+  label?: string;
+  labelTone?: PortfolioTone;
+  health?: string;
+  progress?: number;
+  note?: string;
+  variance?: string;
+  varianceTone?: "danger" | "success" | "warning";
+  tasks?: readonly string[];
+  compliance?: "PASSED" | "PENDING";
+  complianceTone?: "success" | "danger";
+}
+
+const projectPresentationMap: Record<string, ProjectPresentation> = {
+  "CF-SR-2024": {
+    sector: "Residential",
+    client: "Westshore Capital",
     label: "ON TRACK",
     labelTone: "success",
-    title: "Skyline Residences",
-    location: "Austin, TX",
-    value: "$412,500",
     health: "98",
     progress: 85,
-    note: "85% Budget Utilization"
+    note: "85% Budget Utilization",
+    variance: "+0.8%",
+    varianceTone: "success",
+    tasks: ["JS", "AW", "+4"],
+    compliance: "PASSED",
+    complianceTone: "success"
   },
-  {
+  "HLH-002": {
+    sector: "Industrial",
+    client: "Port Authority",
     label: "CRITICAL VARIANCE",
     labelTone: "danger",
-    title: "Harbor Logistics Hub",
-    location: "Savannah, GA",
-    value: "$1,240,000",
     health: "42",
     progress: 100,
-    note: "105% Over Initial Estimate"
+    note: "105% Over Initial Estimate",
+    variance: "+4.2%",
+    varianceTone: "danger",
+    tasks: ["MK", "RS", "+3"],
+    compliance: "PENDING",
+    complianceTone: "danger"
   },
-  {
+  "PTP-003": {
+    sector: "Commercial",
+    client: "Nexa Tech Fund",
     label: "DRAFT",
     labelTone: "neutral",
-    title: "Phoenix Tech Plaza",
-    location: "Phoenix, AZ",
-    value: "$85,200",
     health: "--",
     progress: 10,
-    note: "Initial Setup Phase"
-  }
-] as const;
-
-const inventoryRows = [
-  {
-    name: "Oak Creek Bridge",
-    meta: "Infrastructure • ID: 2991-A",
+    note: "Initial Setup Phase",
+    variance: "-0.4%",
+    varianceTone: "success",
+    tasks: ["AL", "BT"],
+    compliance: "PASSED",
+    complianceTone: "success"
+  },
+  "OCB-004": {
+    sector: "Infrastructure",
     client: "State DOT",
-    contractValue: "$12,400,000",
     variance: "+4.2%",
     varianceTone: "danger",
     tasks: ["JB", "MK", "+3"],
     compliance: "PASSED",
     complianceTone: "success"
   },
-  {
-    name: "Northside Library Renovation",
-    meta: "Public Works • ID: 1042-C",
+  "NLR-005": {
+    sector: "Public Works",
     client: "City of Portland",
-    contractValue: "$2,850,000",
     variance: "-0.8%",
     varianceTone: "success",
     tasks: ["AL", "BT"],
     compliance: "PASSED",
     complianceTone: "success"
   },
-  {
-    name: "Emerald Tower B",
-    meta: "Commercial • ID: 7721-F",
+  "ETB-006": {
+    sector: "Commercial",
     client: "Vanguard Dev Group",
-    contractValue: "$45,000,000",
     variance: "+1.5%",
     varianceTone: "warning",
     tasks: ["RS", "NM", "WP", "+12"],
     compliance: "PENDING",
     complianceTone: "danger"
   }
-] as const;
+};
 
 function StatusPill({
   label,
   tone
 }: {
   label: string;
-  tone: "success" | "danger" | "neutral";
+  tone: PortfolioTone;
 }) {
   const styles = {
     success: {
@@ -127,15 +158,7 @@ function StatusPill({
           backgroundColor: styles.dotColor
         }}
       />
-      <Typography
-        sx={{
-          fontSize: "0.78rem",
-          fontWeight: 700,
-          letterSpacing: 0.2
-        }}
-      >
-        {label}
-      </Typography>
+      <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, letterSpacing: 0.2 }}>{label}</Typography>
     </Box>
   );
 }
@@ -163,15 +186,7 @@ function CompliancePill({
         color: styles.color
       }}
     >
-      <Typography
-        sx={{
-          fontSize: "0.72rem",
-          fontWeight: 800,
-          letterSpacing: 0.4
-        }}
-      >
-        {label}
-      </Typography>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, letterSpacing: 0.4 }}>{label}</Typography>
     </Box>
   );
 }
@@ -208,11 +223,135 @@ function TaskAvatars({ tasks }: { tasks: readonly string[] }) {
   );
 }
 
+function featuredProjects(projects: Project[]) {
+  const featuredOrder = ["CF-SR-2024", "HLH-002", "PTP-003"];
+  const sorted = [...projects].sort((left, right) => featuredOrder.indexOf(left.code) - featuredOrder.indexOf(right.code));
+
+  return sorted.filter((project) => featuredOrder.includes(project.code)).slice(0, 3);
+}
+
+function toCsvValue(value: string | number) {
+  const normalized = String(value).replace(/"/g, "\"\"");
+  return `"${normalized}"`;
+}
+
 export function ProjectsPage() {
-  const { error } = useProjects();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuthContext();
+  const { projects, error, refresh } = useProjects();
+  const [page, setPage] = useState(1);
+  const [message, setMessage] = useState("");
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const pageSize = 10;
+  const searchQuery = searchParams.get("search")?.trim().toLowerCase() ?? "";
+
+  const filteredProjects = useMemo(
+    () =>
+      projects.filter((project) => {
+        if (!searchQuery) {
+          return true;
+        }
+
+        const presentation = projectPresentationMap[project.code];
+
+        return (
+          project.name.toLowerCase().includes(searchQuery) ||
+          project.code.toLowerCase().includes(searchQuery) ||
+          project.location.toLowerCase().includes(searchQuery) ||
+          presentation?.client.toLowerCase().includes(searchQuery) ||
+          presentation?.sector.toLowerCase().includes(searchQuery)
+        );
+      }),
+    [projects, searchQuery]
+  );
+
+  const featured = useMemo(() => featuredProjects(filteredProjects), [filteredProjects]);
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedProjects = useMemo(
+    () => filteredProjects.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [currentPage, filteredProjects]
+  );
+  const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    setSelectedProjectIds((current) => {
+      const visibleProjectIds = new Set(filteredProjects.map((project) => project.id));
+      const next = current.filter((projectId) => visibleProjectIds.has(projectId));
+
+      if (next.length === current.length && next.every((projectId, index) => projectId === current[index])) {
+        return current;
+      }
+
+      return next;
+    });
+  }, [filteredProjects]);
+
+  function exportProjectsCsv() {
+    const rows = projects.map((project) => {
+      const presentation = projectPresentationMap[project.code];
+
+      return [
+        project.name,
+        project.code,
+        project.location,
+        project.status,
+        String(project.contractValue),
+        presentation?.client ?? "Regional Portfolio",
+        presentation?.variance ?? "0.0%",
+        presentation?.compliance ?? "PASSED"
+      ];
+    });
+
+    const csv = [
+      ["Project Name", "Code", "Location", "Status", "Contract Value", "Client", "Variance", "Compliance"],
+      ...rows
+    ]
+      .map((row) => row.map(toCsvValue).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "changeflow-projects.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+
+    setMessage("Project inventory exported as CSV.");
+  }
+
+  function toggleProjectSelection(projectId: string) {
+    setSelectedProjectIds((current) =>
+      current.includes(projectId) ? current.filter((item) => item !== projectId) : [...current, projectId]
+    );
+  }
+
+  function togglePageSelection() {
+    const pageProjectIds = pagedProjects.map((project) => project.id);
+    const allSelected = pageProjectIds.every((projectId) => selectedProjectIds.includes(projectId));
+
+    setSelectedProjectIds((current) => {
+      if (allSelected) {
+        return current.filter((projectId) => !pageProjectIds.includes(projectId));
+      }
+
+      return [...new Set([...current, ...pageProjectIds])];
+    });
+  }
 
   return (
     <Stack spacing={4}>
+      {message ? <Alert severity="info">{message}</Alert> : null}
       {error ? <Alert severity="warning">{error}</Alert> : null}
 
       <Box
@@ -258,8 +397,8 @@ export function ProjectsPage() {
               color: "#5A6A84"
             }}
           >
-            Centralized visibility into 14 active construction projects, tracking financial variances
-            and operational health in real-time.
+            Centralized visibility into {projects.length} active construction projects, tracking financial
+            variances and operational health in real-time.
           </Typography>
         </Box>
 
@@ -270,7 +409,6 @@ export function ProjectsPage() {
               px: 2.2,
               py: 1.4,
               borderRadius: 2.5,
-              border: "none",
               backgroundColor: "#D5ECF8",
               color: "#00342B"
             }}
@@ -286,16 +424,31 @@ export function ProjectsPage() {
               px: 2.2,
               py: 1.4,
               borderRadius: 2.5,
-              border: "none",
               backgroundColor: "#D5ECF8",
               color: "#00342B"
             }}
           >
             <Stack direction="row" spacing={1.2} alignItems="center">
               <CalendarTodayRoundedIcon sx={{ fontSize: 20 }} />
-              <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>Q4 2024</Typography>
+              <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>Q1 2026</Typography>
             </Stack>
           </Paper>
+          <ButtonBase
+            onClick={() => setCreateProjectOpen(true)}
+            sx={{
+              px: 2.2,
+              py: 1.4,
+              borderRadius: 2.5,
+              backgroundColor: "#00342B",
+              color: "#FFFFFF",
+              boxShadow: "0 12px 24px rgba(7,30,39,0.08)"
+            }}
+          >
+            <Stack direction="row" spacing={1.1} alignItems="center">
+              <AddRoundedIcon sx={{ fontSize: 20 }} />
+              <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>New Project</Typography>
+            </Stack>
+          </ButtonBase>
         </Stack>
       </Box>
 
@@ -306,137 +459,152 @@ export function ProjectsPage() {
           gap: 2.5
         }}
       >
-        {portfolioCards.map((card) => (
-          <Paper
-            key={card.title}
-            elevation={0}
-            sx={{
-              p: 3.5,
-              borderRadius: 4,
-              border: "none",
-              backgroundColor: "#FFFFFF",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-            }}
-          >
-            <StatusPill label={card.label} tone={card.labelTone} />
+        {featured.map((project) => {
+          const presentation = projectPresentationMap[project.code];
 
-            <Typography
+          return (
+            <Paper
+              key={project.id}
+              elevation={0}
+              onClick={() => navigate(`/app/projects/${project.id}`)}
               sx={{
-                mt: 2,
-                fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                fontSize: "1.95rem",
-                fontWeight: 700,
-                letterSpacing: -1.2,
-                color: "#00342B"
+                p: 3.5,
+                borderRadius: 4,
+                cursor: "pointer",
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 12px 32px rgba(7,30,39,0.04)",
+                transition: "transform 180ms ease, box-shadow 180ms ease",
+                "&:hover": {
+                  transform: "translateY(-2px)",
+                  boxShadow: "0 18px 36px rgba(7,30,39,0.08)"
+                }
               }}
             >
-              {card.title}
-            </Typography>
+              {presentation?.label && presentation.labelTone ? (
+                <StatusPill label={presentation.label} tone={presentation.labelTone} />
+              ) : null}
 
-            <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 1 }}>
-              <LocationOnRoundedIcon sx={{ fontSize: 16, color: "#6B7A90" }} />
-              <Typography sx={{ fontSize: "0.98rem", color: "#6B7A90" }}>{card.location}</Typography>
-            </Stack>
+              <Typography
+                sx={{
+                  mt: 2,
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "1.95rem",
+                  fontWeight: 700,
+                  letterSpacing: -1.2,
+                  color: "#00342B"
+                }}
+              >
+                {project.name}
+              </Typography>
 
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 2,
-                mt: 4.5,
-                mb: 4
-              }}
-            >
-              <Box>
-                <Typography
-                  sx={{
-                    fontSize: "0.72rem",
-                    fontWeight: 800,
-                    letterSpacing: 2,
-                    textTransform: "uppercase",
-                    color: "#93A6C3"
-                  }}
-                >
-                  CO Value
-                </Typography>
-                <Typography
-                  sx={{
-                    mt: 1,
-                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: "2rem",
-                    fontWeight: 700,
-                    letterSpacing: -1.1,
-                    color: card.labelTone === "danger" ? "#5B1300" : "#00342B"
-                  }}
-                >
-                  {card.value}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography
-                  sx={{
-                    fontSize: "0.72rem",
-                    fontWeight: 800,
-                    letterSpacing: 2,
-                    textTransform: "uppercase",
-                    color: "#93A6C3"
-                  }}
-                >
-                  Health Score
-                </Typography>
-                <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 1 }}>
+              <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 1 }}>
+                <LocationOnRoundedIcon sx={{ fontSize: 16, color: "#6B7A90" }} />
+                <Typography sx={{ fontSize: "0.98rem", color: "#6B7A90" }}>{project.location}</Typography>
+              </Stack>
+
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 2,
+                  mt: 4.5,
+                  mb: 4
+                }}
+              >
+                <Box>
                   <Typography
                     sx={{
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      textTransform: "uppercase",
+                      color: "#93A6C3"
+                    }}
+                  >
+                    Contract Value
+                  </Typography>
+                  <Typography
+                    sx={{
+                      mt: 1,
                       fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
                       fontSize: "2rem",
                       fontWeight: 700,
                       letterSpacing: -1.1,
-                      color: card.labelTone === "danger" ? "#5B1300" : "#00342B"
+                      color: presentation?.labelTone === "danger" ? "#5B1300" : "#00342B"
                     }}
                   >
-                    {card.health}
+                    {formatCurrency(project.contractValue)}
                   </Typography>
-                  {card.health !== "--" ? (
-                    card.labelTone === "danger" ? (
-                      <WarningAmberRoundedIcon sx={{ fontSize: 20, color: "#5B1300" }} />
-                    ) : (
-                      <FavoriteRoundedIcon sx={{ fontSize: 18, color: "#046B5E" }} />
-                    )
-                  ) : null}
-                </Stack>
+                </Box>
+                <Box>
+                  <Typography
+                    sx={{
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      textTransform: "uppercase",
+                      color: "#93A6C3"
+                    }}
+                  >
+                    Health Score
+                  </Typography>
+                  <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 1 }}>
+                    <Typography
+                      sx={{
+                        fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                        fontSize: "2rem",
+                        fontWeight: 700,
+                        letterSpacing: -1.1,
+                        color: presentation?.labelTone === "danger" ? "#5B1300" : "#00342B"
+                      }}
+                    >
+                      {presentation?.health ?? "94"}
+                    </Typography>
+                    {presentation?.health && presentation.health !== "--" ? (
+                      presentation.labelTone === "danger" ? (
+                        <WarningAmberRoundedIcon sx={{ fontSize: 20, color: "#5B1300" }} />
+                      ) : (
+                        <FavoriteRoundedIcon sx={{ fontSize: 18, color: "#046B5E" }} />
+                      )
+                    ) : null}
+                  </Stack>
+                </Box>
               </Box>
-            </Box>
 
-            <Box sx={{ width: "100%", height: 8, borderRadius: 999, backgroundColor: "#D5ECF8", overflow: "hidden" }}>
-              <Box
+              <Box sx={{ width: "100%", height: 8, borderRadius: 999, backgroundColor: "#D5ECF8", overflow: "hidden" }}>
+                <Box
+                  sx={{
+                    width: `${presentation?.progress ?? 64}%`,
+                    height: "100%",
+                    borderRadius: 999,
+                    backgroundColor:
+                      presentation?.labelTone === "danger"
+                        ? "#5B1300"
+                        : presentation?.labelTone === "neutral"
+                          ? "#707975"
+                          : "#046B5E"
+                  }}
+                />
+              </Box>
+              <Typography
                 sx={{
-                  width: `${card.progress}%`,
-                  height: "100%",
-                  borderRadius: 999,
-                  backgroundColor:
-                    card.labelTone === "danger" ? "#5B1300" : card.labelTone === "neutral" ? "#707975" : "#046B5E"
+                  mt: 1.4,
+                  fontSize: "0.82rem",
+                  fontWeight: presentation?.labelTone === "danger" ? 800 : 500,
+                  color: presentation?.labelTone === "danger" ? "#5B1300" : "#93A6C3"
                 }}
-              />
-            </Box>
-            <Typography
-              sx={{
-                mt: 1.4,
-                fontSize: "0.82rem",
-                fontWeight: card.labelTone === "danger" ? 800 : 500,
-                color: card.labelTone === "danger" ? "#5B1300" : "#93A6C3"
-              }}
-            >
-              {card.note}
-            </Typography>
-          </Paper>
-        ))}
+              >
+                {presentation?.note ?? `${presentation?.sector ?? "Project"} in active portfolio review`}
+              </Typography>
+            </Paper>
+          );
+        })}
       </Box>
 
       <Paper
         elevation={0}
         sx={{
           borderRadius: 5,
-          border: "none",
           overflow: "hidden",
           backgroundColor: "#FFFFFF",
           boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
@@ -467,12 +635,16 @@ export function ProjectsPage() {
           </Typography>
 
           <Stack direction="row" spacing={3} useFlexGap flexWrap="wrap">
-            <Typography sx={{ fontSize: "0.9rem", fontWeight: 800, letterSpacing: 2.2, textTransform: "uppercase", color: "#046B5E" }}>
-              Export CSV
-            </Typography>
-            <Typography sx={{ fontSize: "0.9rem", fontWeight: 800, letterSpacing: 2.2, textTransform: "uppercase", color: "#046B5E" }}>
-              Bulk Actions
-            </Typography>
+            <ButtonLikeText label="Export CSV" onClick={exportProjectsCsv} />
+            <ButtonLikeText
+              label="Bulk Actions"
+              onClick={() => {
+                if (selectedProjectIds.length === 0) {
+                  setSelectedProjectIds(pagedProjects.map((project) => project.id));
+                }
+                setBulkModalOpen(true);
+              }}
+            />
           </Stack>
         </Box>
 
@@ -481,12 +653,20 @@ export function ProjectsPage() {
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: "2.2fr 1.5fr 1.6fr 1.2fr 1.5fr 1fr 0.2fr",
+                gridTemplateColumns: "0.42fr 2.2fr 1.5fr 1.6fr 1.2fr 1.5fr 1fr 0.2fr",
                 px: 5,
                 py: 3,
                 backgroundColor: "rgba(230,246,255,0.56)"
               }}
             >
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <Checkbox
+                  checked={pagedProjects.length > 0 && pagedProjects.every((project) => selectedProjectIds.includes(project.id))}
+                  indeterminate={pagedProjects.some((project) => selectedProjectIds.includes(project.id)) && !pagedProjects.every((project) => selectedProjectIds.includes(project.id))}
+                  onChange={togglePageSelection}
+                  sx={{ color: "#93A6C3" }}
+                />
+              </Box>
               {["Project Name", "Client", "Contract Value", "CO Variance", "Active Tasks", "Compliance", ""].map((item) => (
                 <Typography
                   key={item}
@@ -503,52 +683,86 @@ export function ProjectsPage() {
               ))}
             </Box>
 
-            {inventoryRows.map((row, index) => (
-              <Box
-                key={row.name}
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "2.2fr 1.5fr 1.6fr 1.2fr 1.5fr 1fr 0.2fr",
-                  alignItems: "center",
-                  px: 5,
-                  py: 3.5,
-                  backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF"
-                }}
-              >
-                <Box>
-                  <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{row.name}</Typography>
-                  <Typography sx={{ mt: 0.6, fontSize: "0.92rem", color: "#6B7A90" }}>{row.meta}</Typography>
+            {pagedProjects.map((project, index) => {
+              const presentation = projectPresentationMap[project.code] ?? {
+                sector: "Construction",
+                client: "Regional Portfolio",
+                variance: "+1.1%",
+                varianceTone: "warning" as const,
+                tasks: ["PM", "QS", "+2"] as const,
+                compliance: "PASSED" as const,
+                complianceTone: "success" as const
+              };
+
+              return (
+                <Box
+                  key={project.id}
+                  onClick={() => navigate(`/app/projects/${project.id}`)}
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "0.42fr 2.2fr 1.5fr 1.6fr 1.2fr 1.5fr 1fr 0.2fr",
+                    alignItems: "center",
+                    px: 5,
+                    py: 3.5,
+                    cursor: "pointer",
+                    backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF",
+                    transition: "background-color 160ms ease",
+                    "&:hover": {
+                      backgroundColor: "#F3FAFF"
+                    }
+                  }}
+                >
+                  <Box
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
+                  >
+                    <Checkbox
+                      checked={selectedProjectIds.includes(project.id)}
+                      onChange={() => toggleProjectSelection(project.id)}
+                      sx={{ color: "#93A6C3" }}
+                    />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{project.name}</Typography>
+                    <Typography sx={{ mt: 0.6, fontSize: "0.92rem", color: "#6B7A90" }}>
+                      {presentation.sector} • ID: {project.code}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: "1rem", color: "#071E27" }}>{presentation.client}</Typography>
+                  <Typography
+                    sx={{
+                      fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                      fontSize: "1.15rem",
+                      fontWeight: 700,
+                      color: "#00342B"
+                    }}
+                  >
+                    {formatCurrency(project.contractValue)}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: "1rem",
+                      fontWeight: 800,
+                      color:
+                        presentation.varianceTone === "danger"
+                          ? "#5B1300"
+                          : presentation.varianceTone === "warning"
+                            ? "#00342B"
+                            : "#046B5E"
+                    }}
+                  >
+                    {presentation.variance}
+                  </Typography>
+                  <TaskAvatars tasks={presentation.tasks ?? ["PM", "+2"]} />
+                  <CompliancePill
+                    label={presentation.compliance ?? "PASSED"}
+                    tone={presentation.complianceTone ?? "success"}
+                  />
+                  <MoreHorizRoundedIcon sx={{ color: "#93A6C3" }} />
                 </Box>
-                <Typography sx={{ fontSize: "1rem", color: "#071E27" }}>{row.client}</Typography>
-                <Typography
-                  sx={{
-                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: "1.15rem",
-                    fontWeight: 700,
-                    color: "#00342B"
-                  }}
-                >
-                  {row.contractValue}
-                </Typography>
-                <Typography
-                  sx={{
-                    fontSize: "1rem",
-                    fontWeight: 800,
-                    color:
-                      row.varianceTone === "danger"
-                        ? "#5B1300"
-                        : row.varianceTone === "warning"
-                          ? "#00342B"
-                          : "#046B5E"
-                  }}
-                >
-                  {row.variance}
-                </Typography>
-                <TaskAvatars tasks={row.tasks} />
-                <CompliancePill label={row.compliance} tone={row.complianceTone} />
-                <MoreHorizRoundedIcon sx={{ color: "#93A6C3" }} />
-              </Box>
-            ))}
+              );
+            })}
 
             <Box
               sx={{
@@ -562,53 +776,112 @@ export function ProjectsPage() {
                 backgroundColor: "#E6F6FF"
               }}
             >
-              <Typography sx={{ fontSize: "0.95rem", color: "#5A6A84" }}>Showing 1-10 of 14 projects</Typography>
-              <Stack direction="row" spacing={1.4} alignItems="center">
-                <Paper
-                  elevation={0}
-                  sx={{
-                    width: 38,
-                    height: 38,
-                    display: "grid",
-                    placeItems: "center",
-                    borderRadius: 1.8,
-                    border: "none",
-                    backgroundColor: "#FFFFFF",
-                    color: "#00342B"
-                  }}
-                >
-                  <Typography sx={{ fontWeight: 700 }}>1</Typography>
-                </Paper>
-                <Typography sx={{ fontSize: "1rem", color: "#7A869F" }}>2</Typography>
-                <Typography sx={{ fontSize: "1.2rem", color: "#7A869F" }}>›</Typography>
+              <Typography sx={{ fontSize: "0.95rem", color: "#5A6A84" }}>
+                Showing {filteredProjects.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
+                {Math.min(currentPage * pageSize, filteredProjects.length)} of {filteredProjects.length} projects
+              </Typography>
+              <Stack direction="row" spacing={1.4} alignItems="center" useFlexGap flexWrap="wrap">
+                {selectedProjectIds.length > 0 ? (
+                  <Typography sx={{ fontSize: "0.9rem", fontWeight: 700, color: "#00342B" }}>
+                    {selectedProjectIds.length} selected
+                  </Typography>
+                ) : null}
+                <ButtonLikePage
+                  active={false}
+                  disabled={currentPage === 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  label="‹"
+                />
+                {pageNumbers.map((pageNumber) => (
+                  <ButtonLikePage
+                    key={pageNumber}
+                    active={currentPage === pageNumber}
+                    onClick={() => setPage(pageNumber)}
+                    label={String(pageNumber)}
+                  />
+                ))}
+                <ButtonLikePage
+                  active={false}
+                  disabled={currentPage === totalPages}
+                  onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                  label="›"
+                />
               </Stack>
             </Box>
           </Box>
         </Box>
       </Paper>
 
-      <Box
+      <BulkProjectActionsModal
+        open={bulkModalOpen}
+        projectIds={selectedProjectIds}
+        onClose={() => setBulkModalOpen(false)}
+        onApplied={async () => {
+          await refresh();
+          setSelectedProjectIds([]);
+          setMessage("Bulk project status update applied across the selected projects.");
+        }}
+      />
+      {user ? (
+        <CreateProjectModal
+          open={createProjectOpen}
+          ownerId={user.id}
+          onClose={() => setCreateProjectOpen(false)}
+          onCreated={async (project) => {
+            await refresh();
+            setMessage(`Project ${project.name} created and added to the portfolio.`);
+            navigate(`/app/projects/${project.id}`);
+          }}
+        />
+      ) : null}
+    </Stack>
+  );
+}
+
+function ButtonLikeText({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <ButtonBase onClick={onClick} sx={{ borderRadius: 2, color: "#046B5E" }}>
+      <Typography
         sx={{
-          pt: 1,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 3,
-          flexWrap: "wrap",
-          color: "rgba(90,106,132,0.86)"
+          fontSize: "0.9rem",
+          fontWeight: 800,
+          letterSpacing: 2.2,
+          textTransform: "uppercase"
         }}
       >
-        <Typography sx={{ fontSize: "0.82rem", letterSpacing: 2.2, textTransform: "uppercase" }}>
-          © 2024 ChangeFlow Intelligence. Built for the modern jobsite.
-        </Typography>
-        <Stack direction="row" spacing={3.5} useFlexGap flexWrap="wrap">
-          {["Terms", "Privacy", "Trust & Security", "API Docs"].map((item) => (
-            <Typography key={item} sx={{ fontSize: "0.82rem", letterSpacing: 2.2, textTransform: "uppercase" }}>
-              {item}
-            </Typography>
-          ))}
-        </Stack>
-      </Box>
-    </Stack>
+        {label}
+      </Typography>
+    </ButtonBase>
+  );
+}
+
+function ButtonLikePage({
+  active,
+  disabled = false,
+  onClick,
+  label
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <Paper
+      elevation={0}
+      onClick={disabled ? undefined : onClick}
+      sx={{
+        width: 38,
+        height: 38,
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 1.8,
+        cursor: disabled ? "default" : "pointer",
+        backgroundColor: active ? "#FFFFFF" : "transparent",
+        color: active ? "#00342B" : disabled ? "#B7C4D8" : "#7A869F"
+      }}
+    >
+      <Typography sx={{ fontWeight: 700 }}>{label}</Typography>
+    </Paper>
   );
 }

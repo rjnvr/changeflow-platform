@@ -18,6 +18,7 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useNavigate } from "react-router-dom";
 
 import { getIntegrations, syncChangeOrder } from "../api/integrations";
 import { Button } from "../components/common/Button";
@@ -49,7 +50,7 @@ interface SyncLogRow {
 const defaultIntegrations: IntegrationConnection[] = [
   {
     id: "int_1",
-    provider: "Slack",
+    provider: "Sage Intacct",
     status: "connected",
     lastSyncedAt: new Date().toISOString()
   },
@@ -61,10 +62,14 @@ const defaultIntegrations: IntegrationConnection[] = [
   },
   {
     id: "int_3",
-    provider: "QuickBooks",
-    status: "disconnected"
+    provider: "Oracle NetSuite",
+    status: "error"
   }
 ];
+
+function toCsvValue(value: string) {
+  return `"${value.replace(/"/g, "\"\"")}"`;
+}
 
 function FooterLinks() {
   return (
@@ -161,61 +166,91 @@ function LogStatusChip({ status }: { status: LogStatus }) {
 }
 
 export function IntegrationsPage() {
+  const navigate = useNavigate();
   const [integrations, setIntegrations] = useState<IntegrationConnection[]>([]);
   const [message, setMessage] = useState("");
   const [syncFrequency, setSyncFrequency] = useState<"real-time" | "hourly">("real-time");
 
+  async function loadIntegrations() {
+    try {
+      const items = await getIntegrations();
+      setIntegrations(items);
+    } catch (requestError) {
+      setMessage(requestError instanceof Error ? requestError.message : "Unable to load integrations.");
+    }
+  }
+
   useEffect(() => {
-    getIntegrations()
-      .then(setIntegrations)
-      .catch((requestError: Error) => setMessage(requestError.message));
+    loadIntegrations().catch(() => undefined);
   }, []);
 
   async function runSampleSync() {
     try {
       const result = await syncChangeOrder("co_1001", "Procore");
+      await loadIntegrations();
       setMessage(`Manual sync completed successfully at ${formatDate(result.syncedAt)}.`);
     } catch (requestError) {
       setMessage(requestError instanceof Error ? requestError.message : "Sync failed.");
     }
   }
 
+  function exportHistory(rows: SyncLogRow[]) {
+    const csv = [
+      ["Resource", "Direction", "Status", "Success Rate", "Timestamp"],
+      ...rows.map((row) => [row.resource, row.direction, row.status, row.successRate, row.timeLabel])
+    ]
+      .map((row) => row.map(toCsvValue).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "changeflow-sync-history.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+
+    setMessage("Sync history exported as CSV.");
+  }
+
   const displayIntegrations = integrations.length > 0 ? integrations : defaultIntegrations;
   const connectedCount = displayIntegrations.filter((item) => item.status === "connected").length;
   const errorCount = displayIntegrations.filter((item) => item.status === "error" || item.status === "disconnected").length;
 
-  const providerCards: ProviderCard[] = displayIntegrations.map((integration) => {
-    if (integration.provider === "Procore") {
+  const providerCards: ProviderCard[] = displayIntegrations
+    .filter((integration) => ["Sage Intacct", "Procore", "Oracle NetSuite"].includes(integration.provider))
+    .map((integration) => {
+      if (integration.provider === "Procore") {
+        return {
+          id: integration.id,
+          provider: "Procore V2",
+          label: integration.status === "connected" ? "Operational" : "Attention Required",
+          score: integration.status === "connected" ? 100 : 78.5,
+          tone: integration.status === "connected" ? "success" : "warning",
+          icon: <ConstructionRoundedIcon sx={{ fontSize: 28 }} />
+        };
+      }
+
+      if (integration.provider === "Oracle NetSuite") {
+        return {
+          id: integration.id,
+          provider: "Oracle NetSuite",
+          label: integration.status === "connected" ? "Active Sync" : "API Delay",
+          score: integration.status === "connected" ? 96.1 : 82.4,
+          tone: integration.status === "connected" ? "success" : "warning",
+          icon: <AccountBalanceRoundedIcon sx={{ fontSize: 28 }} />
+        };
+      }
+
       return {
         id: integration.id,
-        provider: "Procore V2",
-        label: integration.status === "connected" ? "Operational" : "Attention Required",
-        score: integration.status === "connected" ? 100 : 78.5,
+        provider: "Sage Intacct",
+        label: integration.status === "connected" ? "Active Sync" : "Attention Required",
+        score: integration.status === "connected" ? 99.8 : 76.2,
         tone: integration.status === "connected" ? "success" : "warning",
-        icon: <ConstructionRoundedIcon sx={{ fontSize: 28 }} />
+        icon: <HubRoundedIcon sx={{ fontSize: 28 }} />
       };
-    }
-
-    if (integration.provider === "QuickBooks") {
-      return {
-        id: integration.id,
-        provider: "QuickBooks",
-        label: integration.status === "connected" ? "Active Sync" : "API Delay",
-        score: integration.status === "connected" ? 96.1 : 82.4,
-        tone: integration.status === "connected" ? "success" : "warning",
-        icon: <AccountBalanceRoundedIcon sx={{ fontSize: 28 }} />
-      };
-    }
-
-    return {
-      id: integration.id,
-      provider: integration.provider,
-      label: integration.status === "connected" ? "Active Alerts" : "Attention Required",
-      score: integration.status === "connected" ? 99.8 : 76.2,
-      tone: integration.status === "connected" ? "success" : "warning",
-      icon: <HubRoundedIcon sx={{ fontSize: 28 }} />
-    };
-  });
+    });
 
   const syncLogRows: SyncLogRow[] = [
     {
@@ -416,7 +451,7 @@ export function IntegrationsPage() {
             >
               Sync Log
             </Typography>
-            <ButtonBase sx={{ color: "#046B5E" }}>
+            <ButtonBase onClick={() => exportHistory(syncLogRows)} sx={{ color: "#046B5E" }}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <DownloadRoundedIcon sx={{ fontSize: 18 }} />
                 <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>Export History</Typography>
@@ -614,7 +649,7 @@ export function IntegrationsPage() {
                     </Stack>
                     <Typography sx={{ fontSize: "0.88rem", fontWeight: 700, color: "#93A6C3" }}>
                       {integration.status === "connected"
-                        ? integration.provider === "Slack"
+                        ? integration.provider === "Master Gateway"
                           ? "24ms latency"
                           : "Active"
                         : "Retrying"}
@@ -682,19 +717,21 @@ export function IntegrationsPage() {
               Read our detailed architectural documentation for custom field mapping and sync audit flows.
             </Typography>
 
-            <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mt: 4 }}>
-              <Typography
-                sx={{
-                  fontSize: "0.92rem",
-                  fontWeight: 900,
-                  letterSpacing: 1.8,
-                  textTransform: "uppercase"
-                }}
-              >
-                View API Docs
-              </Typography>
-              <ArrowRightGlyph />
-            </Stack>
+            <ButtonBase onClick={() => navigate("/app/resources?panel=api-docs")} sx={{ mt: 4, color: "#FFFFFF" }}>
+              <Stack direction="row" spacing={1.2} alignItems="center">
+                <Typography
+                  sx={{
+                    fontSize: "0.92rem",
+                    fontWeight: 900,
+                    letterSpacing: 1.8,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  View API Docs
+                </Typography>
+                <ArrowRightGlyph />
+              </Stack>
+            </ButtonBase>
           </Paper>
         </Stack>
       </Box>

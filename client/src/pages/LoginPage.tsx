@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import ArchitectureRoundedIcon from "@mui/icons-material/ArchitectureRounded";
 import GoogleIcon from "@mui/icons-material/Google";
@@ -13,8 +13,10 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 
+import { PasswordResetModal } from "../components/auth/PasswordResetModal";
+import { RegisterAccessModal } from "../components/auth/RegisterAccessModal";
 import { Button } from "../components/common/Button";
 import { useAuthContext } from "../context/AuthContext";
 import { DEMO_CREDENTIALS } from "../utils/constants";
@@ -64,25 +66,68 @@ const loginFieldSx = {
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, login, loading } = useAuthContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isAuthenticated, login, register, loading } = useAuthContext();
   const [email, setEmail] = useState(DEMO_CREDENTIALS.email);
   const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
   const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const resetTokenFromUrl = searchParams.get("resetToken")?.trim() ?? "";
+  const resetEmailFromUrl = searchParams.get("resetEmail")?.trim() ?? "";
+
+  useEffect(() => {
+    if (!resetTokenFromUrl) {
+      return;
+    }
+
+    setResetModalOpen(true);
+    setInfoMessage("Your password reset link is ready. Set a new password to continue.");
+  }, [resetTokenFromUrl]);
 
   if (isAuthenticated) {
-    return <Navigate to="/app" replace />;
+    return <Navigate to="/app/dashboard" replace />;
+  }
+
+  function handleResetModalClose() {
+    setResetModalOpen(false);
+
+    if (!resetTokenFromUrl && !resetEmailFromUrl) {
+      return;
+    }
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("resetToken");
+    nextSearchParams.delete("resetEmail");
+    setSearchParams(nextSearchParams, { replace: true });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setInfoMessage("");
 
     try {
       await login(email, password);
-      navigate("/app");
+      navigate("/app/dashboard");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to sign in.");
     }
+  }
+
+  async function handleRegister(input: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+  }) {
+    setError("");
+    setInfoMessage("");
+
+    await register(input);
+    setRegisterModalOpen(false);
+    navigate("/app/dashboard");
   }
 
   return (
@@ -299,6 +344,17 @@ export function LoginPage() {
                     {error}
                   </Alert>
                 ) : null}
+                {infoMessage ? (
+                  <Alert
+                    severity="info"
+                    sx={{
+                      borderRadius: 3,
+                      alignItems: "center"
+                    }}
+                  >
+                    {infoMessage}
+                  </Alert>
+                ) : null}
 
                 <Box>
                   <Typography
@@ -352,9 +408,13 @@ export function LoginPage() {
                       Password
                     </Typography>
                     <Typography
-                      component="a"
-                      href="#"
+                      component="button"
+                      type="button"
+                      onClick={() => setResetModalOpen(true)}
                       sx={{
+                        border: "none",
+                        p: 0,
+                        background: "transparent",
                         fontFamily: '"Inter", "Manrope", sans-serif',
                         fontSize: "0.78rem",
                         fontWeight: 700,
@@ -476,6 +536,7 @@ export function LoginPage() {
                 type="button"
                 variant="outlined"
                 startIcon={<GoogleIcon />}
+                onClick={() => setInfoMessage("Google SSO is staged for a later auth pass. Use the demo credentials for this build.")}
                 sx={{
                   py: 1.5,
                   borderRadius: 3,
@@ -498,6 +559,7 @@ export function LoginPage() {
                 type="button"
                 variant="outlined"
                 startIcon={<GridViewRoundedIcon sx={{ color: "#0078D4" }} />}
+                onClick={() => setInfoMessage("Microsoft SSO is staged for a later auth pass. Use the demo credentials for this build.")}
                 sx={{
                   py: 1.5,
                   borderRadius: 3,
@@ -529,9 +591,13 @@ export function LoginPage() {
             >
               New to ChangeFlow?
               <Typography
-                component="a"
-                href="#"
+                component="button"
+                type="button"
+                onClick={() => setRegisterModalOpen(true)}
                 sx={{
+                  border: "none",
+                  p: 0,
+                  background: "transparent",
                   ml: 0.75,
                   fontWeight: 700,
                   color: "#046B5E",
@@ -556,9 +622,13 @@ export function LoginPage() {
               {footerLinks.map((link) => (
                 <Typography
                   key={link}
-                  component="a"
-                  href="#"
+                  component="button"
+                  type="button"
+                  onClick={() => setInfoMessage(`${link} is staged as part of the public site/legal footer pass.`)}
                   sx={{
+                    border: "none",
+                    p: 0,
+                    background: "transparent",
                     fontFamily: '"Inter", "Manrope", sans-serif',
                     fontSize: "0.62rem",
                     fontWeight: 700,
@@ -584,6 +654,22 @@ export function LoginPage() {
           </Box>
         </Box>
       </Box>
+
+      <RegisterAccessModal
+        open={registerModalOpen}
+        loading={loading}
+        onClose={() => setRegisterModalOpen(false)}
+        onSubmit={handleRegister}
+      />
+      <PasswordResetModal
+        open={resetModalOpen}
+        onClose={handleResetModalClose}
+        initialEmail={resetEmailFromUrl || undefined}
+        initialToken={resetTokenFromUrl || undefined}
+        onCompleted={(message) => {
+          setInfoMessage(message);
+        }}
+      />
     </Box>
   );
 }

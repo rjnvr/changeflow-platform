@@ -4,24 +4,26 @@ import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import InsertDriveFileRoundedIcon from "@mui/icons-material/InsertDriveFileRounded";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
+import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
-import MenuItem from "@mui/material/MenuItem";
-import Modal from "@mui/material/Modal";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
-import { createChangeOrder } from "../../api/changeOrders";
+import { createChangeOrder, createChangeOrderAttachmentUploadIntent } from "../../api/changeOrders";
+import { useProjectTeamMembers } from "../../hooks/useProjectTeamMembers";
 import { Button } from "../common/Button";
+import type { ChangeOrder } from "../../types/changeOrder";
 import type { Project } from "../../types/project";
 
 interface CreateChangeOrderModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated?: () => Promise<void> | void;
+  onCreated?: (createdChangeOrder: ChangeOrder) => Promise<void> | void;
   projects: Project[];
   defaultProjectId?: string;
 }
@@ -42,6 +44,22 @@ const fieldStyles = {
   }
 } as const;
 
+function formatFileSize(fileSize: number) {
+  if (fileSize >= 1024 * 1024) {
+    return `${(fileSize / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(fileSize / 1024))} KB`;
+}
+
+function getUploadErrorMessage(fileName: string, error: unknown) {
+  if (error instanceof TypeError) {
+    return `The browser could not upload ${fileName}. Check your S3 bucket CORS settings for http://localhost:5173.`;
+  }
+
+  return error instanceof Error ? error.message : `Unable to upload ${fileName} to storage.`;
+}
+
 export function CreateChangeOrderModal({
   open,
   onClose,
@@ -54,33 +72,70 @@ export function CreateChangeOrderModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
   const [urgent, setUrgent] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const { teamMembers, loading: loadingTeamMembers } = useProjectTeamMembers(projectId);
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    const nextProjectId = defaultProjectId ?? projects[0]?.id ?? "";
-    setProjectId(nextProjectId);
+    setProjectId(defaultProjectId ?? "");
     setTitle("");
     setDescription("");
     setAmount("");
+    setAssignedTo("");
     setUrgent(false);
     setFiles([]);
     setError("");
-  }, [defaultProjectId, open, projects]);
+  }, [defaultProjectId, open]);
+
+  useEffect(() => {
+    if (!open || projectId) {
+      return;
+    }
+
+    const nextProjectId = defaultProjectId ?? projects[0]?.id ?? "";
+
+    if (nextProjectId) {
+      setProjectId(nextProjectId);
+    }
+  }, [defaultProjectId, open, projectId, projects]);
+
+  useEffect(() => {
+    if (!open || teamMembers.length === 0) {
+      return;
+    }
+
+    const hasSelectedMember = teamMembers.some((member) => member.name === assignedTo);
+
+    if (!hasSelectedMember) {
+      setAssignedTo(teamMembers[0]?.name ?? "");
+    }
+  }, [assignedTo, open, teamMembers]);
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setFiles(Array.from(event.target.files ?? []));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const numericAmount = Number(amount);
 
-    if (!projectId || title.trim().length < 2 || description.trim().length < 10 || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setError("Add a project, title, description, and a positive estimated value.");
+    if (
+      !projectId ||
+      assignedTo.trim().length < 2 ||
+      title.trim().length < 2 ||
+      description.trim().length < 10 ||
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      setError("Add a project, assignee, title, description, and a positive estimated value.");
       return;
     }
 
@@ -88,49 +143,99 @@ export function CreateChangeOrderModal({
     setError("");
 
     try {
-      await createChangeOrder({
+      const uploadedAttachments =
+        files.length > 0
+          ? await Promise.all(
+              files.map(async (file) => {
+                const uploadIntent = await createChangeOrderAttachmentUploadIntent({
+                  projectId,
+                  fileName: file.name,
+                  contentType: file.type || undefined,
+                  fileSize: file.size
+                });
+
+                const uploadResponse = await fetch(uploadIntent.uploadUrl, {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": uploadIntent.contentType
+                  },
+                  body: file
+                });
+
+                if (!uploadResponse.ok) {
+                  const uploadErrorBody = await uploadResponse.text();
+                  const normalizedErrorBody = uploadErrorBody.replace(/\s+/g, " ").trim();
+                  throw new Error(
+                    `Unable to upload ${file.name} to storage (status ${uploadResponse.status}). ${
+                      normalizedErrorBody || "S3 rejected the upload request."
+                    }`
+                  );
+                }
+
+                return {
+                  title: file.name.replace(/\.[^/.]+$/, "") || file.name,
+                  storageKey: uploadIntent.storageKey,
+                  fileName: uploadIntent.fileName,
+                  contentType: uploadIntent.contentType,
+                  fileSize: uploadIntent.fileSize
+                };
+              })
+            )
+          : [];
+
+      const createdChangeOrder = await createChangeOrder({
         projectId,
         title: urgent ? `${title.trim()} [Urgent]` : title.trim(),
         description: description.trim(),
         amount: numericAmount,
-        requestedBy: "Demo User"
+        requestedBy: "Demo User",
+        assignedTo: assignedTo.trim(),
+        attachments: uploadedAttachments
       });
 
-      await onCreated?.();
+      await onCreated?.(createdChangeOrder);
       onClose();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to create change order.");
+      const firstFileName = files[0]?.name;
+      setError(
+        firstFileName
+          ? getUploadErrorMessage(firstFileName, requestError)
+          : requestError instanceof Error
+            ? requestError.message
+            : "Unable to create change order."
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} sx={{ zIndex: 1400 }}>
-      <Box
-        sx={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          p: { xs: 2, md: 4 },
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth={false}
+      sx={{
+        zIndex: 1400,
+        "& .MuiBackdrop-root": {
           backgroundColor: "rgba(0,52,43,0.16)",
           backdropFilter: "blur(8px)"
-        }}
-      >
-        <Box
-          component="form"
-          onSubmit={handleSubmit}
-          sx={{
-            width: "100%",
-            maxWidth: 840,
-            maxHeight: "92vh",
-            overflow: "hidden",
-            borderRadius: 6,
-            backgroundColor: "#FFFFFF",
-            boxShadow: "0 32px 64px rgba(7,30,39,0.18)"
-          }}
-        >
+        },
+        "& .MuiDialog-paper": {
+          width: "100%",
+          maxWidth: 840,
+          maxHeight: "92vh",
+          m: { xs: 2, md: 4 },
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: 6,
+          overflow: "hidden",
+          backgroundColor: "#FFFFFF",
+          boxShadow: "0 32px 64px rgba(7,30,39,0.18)"
+        }
+      }}
+    >
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
           <Box
             sx={{
               px: { xs: 3, md: 5 },
@@ -163,7 +268,15 @@ export function CreateChangeOrderModal({
             </IconButton>
           </Box>
 
-          <Box sx={{ px: { xs: 3, md: 5 }, py: 4, maxHeight: "calc(92vh - 198px)", overflowY: "auto" }}>
+          <Box
+            sx={{
+              px: { xs: 3, md: 5 },
+              py: 4,
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto"
+            }}
+          >
             <Stack spacing={4}>
               <Box
                 sx={{
@@ -190,12 +303,18 @@ export function CreateChangeOrderModal({
                     fullWidth
                     value={projectId}
                     onChange={(event) => setProjectId(event.target.value)}
+                    SelectProps={{
+                      native: true
+                    }}
                     sx={fieldStyles}
                   >
+                    <option value="" disabled>
+                      Select a project
+                    </option>
                     {projects.map((project) => (
-                      <MenuItem key={project.id} value={project.id}>
+                      <option key={project.id} value={project.id}>
                         {project.name} - {project.code}
-                      </MenuItem>
+                      </option>
                     ))}
                   </TextField>
                 </Box>
@@ -215,12 +334,60 @@ export function CreateChangeOrderModal({
                   </Typography>
                   <TextField
                     fullWidth
+                    autoFocus
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                     placeholder="e.g., Structural Steel Reinforcement"
                     sx={fieldStyles}
                   />
                 </Box>
+              </Box>
+
+              <Box>
+                <Typography
+                  sx={{
+                    mb: 1.2,
+                    fontSize: "0.88rem",
+                    fontWeight: 900,
+                    letterSpacing: 2,
+                    textTransform: "uppercase",
+                    color: "#00342B"
+                  }}
+                >
+                  Assign To
+                </Typography>
+                {teamMembers.length > 0 ? (
+                  <TextField
+                    select
+                    fullWidth
+                    value={assignedTo}
+                    onChange={(event) => setAssignedTo(event.target.value)}
+                    SelectProps={{
+                      native: true
+                    }}
+                    helperText={
+                      loadingTeamMembers
+                        ? "Loading project roster..."
+                        : "Choose a team member from the selected project's on-site roster."
+                    }
+                    sx={fieldStyles}
+                  >
+                    {teamMembers.map((member) => (
+                      <option key={member.id} value={member.name}>
+                        {member.name} - {member.role}
+                      </option>
+                    ))}
+                  </TextField>
+                ) : (
+                  <TextField
+                    fullWidth
+                    value={assignedTo}
+                    onChange={(event) => setAssignedTo(event.target.value)}
+                    placeholder={loadingTeamMembers ? "Loading team roster..." : "e.g., Marcus Chen"}
+                    helperText="This project has no saved team roster yet, so you can type an assignee manually."
+                    sx={fieldStyles}
+                  />
+                )}
               </Box>
 
               <Box>
@@ -331,12 +498,30 @@ export function CreateChangeOrderModal({
                       Drag & drop blueprints or quotes
                     </Typography>
                     <Typography sx={{ fontSize: "0.92rem", color: "#707975" }}>
-                      Supported formats: PDF, DWG, JPG up to 25MB
+                      Supported formats: PDF, DWG, JPG, PNG, XLSX, DOCX, ZIP up to 25MB each
                     </Typography>
                     {files.length > 0 ? (
-                      <Typography sx={{ fontSize: "0.86rem", color: "#046B5E", fontWeight: 700 }}>
-                        {files.map((file) => file.name).join(", ")}
-                      </Typography>
+                      <Stack spacing={0.8} sx={{ width: "100%", maxWidth: 460 }}>
+                        {files.map((file) => (
+                          <Stack
+                            key={`${file.name}-${file.size}`}
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            justifyContent="center"
+                            useFlexGap
+                            flexWrap="wrap"
+                          >
+                            <InsertDriveFileRoundedIcon sx={{ fontSize: 18, color: "#046B5E" }} />
+                            <Typography sx={{ fontSize: "0.86rem", color: "#046B5E", fontWeight: 700 }}>
+                              {file.name}
+                            </Typography>
+                            <Typography sx={{ fontSize: "0.78rem", color: "#7A869F" }}>
+                              {formatFileSize(file.size)}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </Stack>
                     ) : null}
                   </Stack>
                 </ButtonBase>
@@ -346,9 +531,8 @@ export function CreateChangeOrderModal({
                   type="file"
                   multiple
                   sx={{ display: "none" }}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    setFiles(Array.from(event.target.files ?? []));
-                  }}
+                  accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx,.zip"
+                  onChange={handleFileChange}
                 />
               </Box>
 
@@ -362,6 +546,9 @@ export function CreateChangeOrderModal({
             sx={{
               px: { xs: 3, md: 5 },
               py: 3,
+              position: "sticky",
+              bottom: 0,
+              zIndex: 1,
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -373,7 +560,7 @@ export function CreateChangeOrderModal({
             <Stack direction="row" spacing={1} alignItems="center">
               <InfoOutlinedIcon sx={{ color: "#42536D", fontSize: 18 }} />
               <Typography sx={{ fontSize: "0.9rem", color: "#42536D" }}>
-                Assigned to: <strong>Marcus Chen (Senior Engineer)</strong>
+                Assigned to: <strong>{assignedTo || "Select an assignee"}</strong>
               </Typography>
             </Stack>
 
@@ -409,8 +596,7 @@ export function CreateChangeOrderModal({
               </Button>
             </Stack>
           </Box>
-        </Box>
       </Box>
-    </Modal>
+    </Dialog>
   );
 }

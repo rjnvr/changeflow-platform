@@ -1,34 +1,54 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  RouterProvider,
+  createBrowserRouter,
+  createRoutesFromElements
+} from "react-router-dom";
 
 import { AppLayout } from "../components/layout/AppLayout";
+import { BudgetPage } from "../pages/BudgetPage";
+import { ChangeOrderDetailsPage } from "../pages/ChangeOrderDetailsPage";
 import { ChangeOrdersPage } from "../pages/ChangeOrdersPage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { DirectoryPage } from "../pages/DirectoryPage";
 import { HomePage } from "../pages/HomePage";
 import { IntegrationsPage } from "../pages/IntegrationsPage";
 import { LoginPage } from "../pages/LoginPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ProjectDetailsPage } from "../pages/ProjectDetailsPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
+import { ResourcesPage } from "../pages/ResourcesPage";
+import { SchedulePage } from "../pages/SchedulePage";
+import { TeamPage } from "../pages/TeamPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
-export function AppRouter() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="/app" element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="projects" element={<ProjectsPage />} />
-            <Route path="projects/:projectId" element={<ProjectDetailsPage />} />
-            <Route path="change-orders" element={<ChangeOrdersPage />} />
-            <Route path="integrations" element={<IntegrationsPage />} />
-          </Route>
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/app" element={<AppLayout />}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:projectId" element={<ProjectDetailsPage />} />
+          <Route path="change-orders" element={<ChangeOrdersPage />} />
+          <Route path="change-orders/:changeOrderId" element={<ChangeOrderDetailsPage />} />
+          <Route path="budget" element={<BudgetPage />} />
+          <Route path="schedule" element={<SchedulePage />} />
+          <Route path="team" element={<TeamPage />} />
+          <Route path="directory" element={<DirectoryPage />} />
+          <Route path="resources" element={<ResourcesPage />} />
+          <Route path="integrations" element={<IntegrationsPage />} />
         </Route>
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
+      </Route>
+      <Route path="*" element={<NotFoundPage />} />
+    </>
+  )
+);
 
+export function AppRouter() {
+  return <RouterProvider router={router} />;
+}

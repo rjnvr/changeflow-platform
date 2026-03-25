@@ -9,8 +9,12 @@ import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { useAuthContext } from "../../context/AuthContext";
+import { AccountPopover } from "./AccountPopover";
+import { getUserInitials } from "./accountUtils";
 import { Button } from "../common/Button";
 
 interface TopbarProps {
@@ -23,17 +27,30 @@ interface TopbarTab {
   to?: string;
 }
 
-const profileImage =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuAg5WhNmUz3nYr-iXBap4eyG7E1nPFTrjuYL34ekakBz3pPR8rsmSuPXBZzFAFIupVZUkuzD6ksOpNtKl4d9-O0rQnLlzwy1GDicJRgbaDVwBcNcxFJNG-A7yq-ZTHLHMmddqFOPYFlbXjVsXVbj93MuZDSPOAIh9-M6uroiJRn1rElRw24DhcFw1Wbevu--hNDEyc2LWr01cEyQWLgPTDT-N_cHs9vifiRKUROZjqTbjcmQ6706FvOH5gdziKK3hjqz2OtzeeaRm5E";
-
 const tabs: TopbarTab[] = [
   { id: "projects", label: "Projects", to: "/app/projects" },
   { id: "analytics", label: "Analytics", to: "/app/integrations" },
-  { id: "directory", label: "Directory" },
-  { id: "resources", label: "Resources" }
+  { id: "directory", label: "Directory", to: "/app/directory" },
+  { id: "resources", label: "Resources", to: "/app/resources" }
 ];
 
 function getRouteMeta(pathname: string) {
+  if (/^\/app\/change-orders\/[^/]+$/.test(pathname)) {
+    return {
+      title: null,
+      activeTab: "projects",
+      searchPlaceholder: null
+    } as const;
+  }
+
+  if (/^\/app\/projects\/[^/]+$/.test(pathname)) {
+    return {
+      title: null,
+      activeTab: "projects",
+      searchPlaceholder: null
+    } as const;
+  }
+
   if (pathname.startsWith("/app/integrations")) {
     return {
       title: "Integrations Center",
@@ -50,6 +67,36 @@ function getRouteMeta(pathname: string) {
     } as const;
   }
 
+  if (pathname.startsWith("/app/directory")) {
+    return {
+      title: null,
+      activeTab: "directory",
+      searchPlaceholder: "Search people or contacts..."
+    } as const;
+  }
+
+  if (pathname.startsWith("/app/resources")) {
+    return {
+      title: null,
+      activeTab: "resources",
+      searchPlaceholder: "Search resources..."
+    } as const;
+  }
+
+  if (
+    pathname.startsWith("/app/dashboard") ||
+    pathname.startsWith("/app/budget") ||
+    pathname.startsWith("/app/schedule") ||
+    pathname.startsWith("/app/team") ||
+    pathname === "/app"
+  ) {
+    return {
+      title: null,
+      activeTab: "projects",
+      searchPlaceholder: null
+    } as const;
+  }
+
   if (pathname.startsWith("/app/projects")) {
     return {
       title: null,
@@ -61,14 +108,45 @@ function getRouteMeta(pathname: string) {
   return {
     title: null,
     activeTab: "projects",
-    searchPlaceholder: "Search workspace..."
+    searchPlaceholder: null
   } as const;
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuthContext();
+  const [accountAnchorEl, setAccountAnchorEl] = useState<HTMLElement | null>(null);
   const routeMeta = getRouteMeta(location.pathname);
+  const avatarLabel = getUserInitials(user?.firstName, user?.lastName);
+  const searchValue = searchParams.get("search") ?? "";
+
+  useEffect(() => {
+    setAccountAnchorEl(null);
+  }, [location.pathname, location.search]);
+
+  function handleSearchChange(nextValue: string) {
+    const next = new URLSearchParams(searchParams);
+
+    if (nextValue.trim()) {
+      next.set("search", nextValue);
+    } else {
+      next.delete("search");
+    }
+
+    setSearchParams(next, { replace: true });
+  }
+
+  function navigateShell(path: string) {
+    setAccountAnchorEl(null);
+
+    if (`${location.pathname}${location.search}` === path) {
+      return;
+    }
+
+    navigate(path);
+  }
 
   return (
     <Box
@@ -139,7 +217,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                   key={tab.id}
                   onClick={() => {
                     if (tab.to) {
-                      navigate(tab.to);
+                      navigateShell(tab.to);
                     }
                   }}
                   sx={{
@@ -195,6 +273,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               <SearchRoundedIcon sx={{ color: "#7A869F" }} />
               <InputBase
                 placeholder={routeMeta.searchPlaceholder}
+                value={searchValue}
+                onChange={(event) => handleSearchChange(event.target.value)}
                 sx={{
                   flex: 1,
                   minWidth: 0,
@@ -207,6 +287,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
           <Box sx={{ position: "relative" }}>
             <IconButton
+              onClick={() => navigateShell("/app/resources?panel=updates")}
               sx={{
                 color: "#5A6A84",
                 "&:hover": {
@@ -230,6 +311,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           </Box>
 
           <IconButton
+            onClick={() => navigateShell("/app/integrations")}
             sx={{
               color: "#5A6A84",
               "&:hover": {
@@ -241,7 +323,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           </IconButton>
 
           <Button
-            onClick={() => navigate("/app/change-orders?new=1")}
+            onClick={() => navigateShell("/app/change-orders?new=1")}
             startIcon={<AddRoundedIcon />}
             sx={{
               px: 3,
@@ -259,17 +341,39 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             New Change Order
           </Button>
 
-          <Avatar
-            src={profileImage}
-            alt="Workspace user profile"
-            sx={{
-              width: 40,
-              height: 40,
-              boxShadow: "0 8px 20px rgba(7,30,39,0.08)"
+          <IconButton
+            onClick={(event) => {
+              setAccountAnchorEl((currentAnchorEl) => (currentAnchorEl ? null : event.currentTarget));
             }}
-          />
+            aria-label="Open account settings"
+            aria-expanded={Boolean(accountAnchorEl)}
+            aria-haspopup="dialog"
+            sx={{
+              p: 0.25,
+              border: "1px solid rgba(4,107,94,0.12)",
+              boxShadow: "0 8px 20px rgba(7,30,39,0.08)",
+              "&:hover": {
+                backgroundColor: "#F3FAFF"
+              }
+            }}
+          >
+            <Avatar
+              alt={`${user?.firstName ?? "ChangeFlow"} ${user?.lastName ?? "User"}`}
+              sx={{
+                width: 40,
+                height: 40,
+                bgcolor: "#00342B",
+                color: "common.white",
+                fontWeight: 800
+              }}
+            >
+              {avatarLabel}
+            </Avatar>
+          </IconButton>
         </Stack>
       </Box>
+
+      <AccountPopover anchorEl={accountAnchorEl} open={Boolean(accountAnchorEl)} onClose={() => setAccountAnchorEl(null)} />
     </Box>
   );
 }

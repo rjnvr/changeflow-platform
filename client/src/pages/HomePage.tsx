@@ -78,6 +78,27 @@ const footerColumns = [
   }
 ];
 
+function footerLinkTarget(item: string) {
+  const targets: Record<string, string> = {
+    Features: "#features",
+    Integrations: "#workflow",
+    Enterprise: "/login",
+    Pricing: "#cta",
+    "About Us": "/login",
+    Customers: "/login",
+    Careers: "/login",
+    Press: "/login",
+    Documentation: "/login",
+    "API Reference": "/login",
+    Blog: "/login",
+    Support: "/login",
+    LinkedIn: "https://www.linkedin.com",
+    Twitter: "https://x.com"
+  };
+
+  return targets[item] ?? "/login";
+}
+
 function BlueprintBackground() {
   return (
     <Box
@@ -94,7 +115,7 @@ function BlueprintBackground() {
 
 export function HomePage() {
   const { isAuthenticated } = useAuthContext();
-  const primaryCtaRoute = isAuthenticated ? "/app" : "/login";
+  const primaryCtaRoute = isAuthenticated ? "/app/dashboard" : "/login";
 
   return (
     <Box sx={{ minHeight: "100vh", backgroundColor: "#00342B", color: "white" }}>
@@ -845,8 +866,8 @@ export function HomePage() {
               </Button>
               <Button
                 variant="outlined"
-                component="a"
-                href="#"
+                component={RouterLink}
+                to="/login"
                 size="large"
                 sx={{
                   px: 4.5,
@@ -931,24 +952,32 @@ export function HomePage() {
                   {column.title}
                 </Typography>
                 <Stack spacing={2}>
-                  {column.items.map((item) => (
-                    <Typography
-                      key={item}
-                      component="a"
-                      href="#"
-                      sx={{
-                        fontFamily: bodyFont,
-                        fontSize: "0.92rem",
-                        color: "#CFE6F2",
-                        textDecoration: "none",
-                        "&:hover": {
-                          color: "common.white"
-                        }
-                      }}
-                    >
-                      {item}
-                    </Typography>
-                  ))}
+                  {column.items.map((item) => {
+                    const target = footerLinkTarget(item);
+                    const external = target.startsWith("http");
+
+                    return (
+                      <Typography
+                        key={item}
+                        component={external ? "a" : RouterLink}
+                        href={external ? target : undefined}
+                        target={external ? "_blank" : undefined}
+                        rel={external ? "noreferrer" : undefined}
+                        to={external ? undefined : target}
+                        sx={{
+                          fontFamily: bodyFont,
+                          fontSize: "0.92rem",
+                          color: "#CFE6F2",
+                          textDecoration: "none",
+                          "&:hover": {
+                            color: "common.white"
+                          }
+                        }}
+                      >
+                        {item}
+                      </Typography>
+                    );
+                  })}
                 </Stack>
               </Box>
             ))}
@@ -979,8 +1008,8 @@ export function HomePage() {
               {["Terms", "Privacy", "Trust & Security"].map((item) => (
                 <Typography
                   key={item}
-                  component="a"
-                  href="#"
+                  component={RouterLink}
+                  to="/login"
                   sx={{
                     fontFamily: bodyFont,
                     fontSize: "0.68rem",

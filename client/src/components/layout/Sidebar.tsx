@@ -9,6 +9,7 @@ import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import SyncAltRoundedIcon from "@mui/icons-material/SyncAltRounded";
 import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import Stack from "@mui/material/Stack";
@@ -16,7 +17,12 @@ import Typography from "@mui/material/Typography";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const navigationItems = [
-  { label: "Dashboard", to: "/app", icon: <DashboardRoundedIcon />, matches: (pathname: string) => pathname === "/app" },
+  {
+    label: "Dashboard",
+    to: "/app/dashboard",
+    icon: <DashboardRoundedIcon />,
+    matches: (pathname: string) => pathname === "/app" || pathname.startsWith("/app/dashboard")
+  },
   {
     label: "Projects",
     to: "/app/projects",
@@ -29,15 +35,30 @@ const navigationItems = [
     icon: <SyncAltRoundedIcon />,
     matches: (pathname: string) => pathname.startsWith("/app/change-orders")
   },
-  { label: "Budget", icon: <PaymentsRoundedIcon /> },
-  { label: "Schedule", icon: <EventAvailableRoundedIcon /> },
+  {
+    label: "Budget",
+    to: "/app/budget",
+    icon: <PaymentsRoundedIcon />,
+    matches: (pathname: string) => pathname.startsWith("/app/budget")
+  },
+  {
+    label: "Schedule",
+    to: "/app/schedule",
+    icon: <EventAvailableRoundedIcon />,
+    matches: (pathname: string) => pathname.startsWith("/app/schedule")
+  },
   {
     label: "Integrations",
     to: "/app/integrations",
     icon: <SyncAltRoundedIcon />,
     matches: (pathname: string) => pathname.startsWith("/app/integrations")
   },
-  { label: "Team", icon: <GroupRoundedIcon /> }
+  {
+    label: "Team",
+    to: "/app/team",
+    icon: <GroupRoundedIcon />,
+    matches: (pathname: string) => pathname.startsWith("/app/team") || pathname.startsWith("/app/directory")
+  }
 ];
 
 interface SidebarProps {
@@ -53,6 +74,16 @@ const profileImage =
 export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+
+  function navigateShell(path: string) {
+    onClose();
+
+    if (`${location.pathname}${location.search}` === path) {
+      return;
+    }
+
+    navigate(path);
+  }
 
   const content = (
     <Box
@@ -154,17 +185,20 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             const active = item.matches ? item.matches(location.pathname) : false;
 
             return (
-              <Box
+              <ButtonBase
                 key={item.label}
-                onClick={() => {
-                  if (item.to) {
-                    navigate(item.to);
-                    onClose();
-                  }
-                }}
+                onClick={
+                  item.to
+                    ? () => {
+                        navigateShell(item.to);
+                      }
+                    : undefined
+                }
                 sx={{
+                  width: "100%",
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "flex-start",
                   gap: 1.75,
                   px: 2.2,
                   py: 1.6,
@@ -194,7 +228,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 >
                   {item.label}
                 </Typography>
-              </Box>
+              </ButtonBase>
             );
           })}
         </Stack>
@@ -205,21 +239,24 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
         <Stack spacing={1.6}>
           {[
-            { label: "Support", icon: <HelpRoundedIcon sx={{ fontSize: 18 }} /> },
-            { label: "Archive", icon: <ArchiveRoundedIcon sx={{ fontSize: 18 }} /> },
+            { label: "Support", icon: <HelpRoundedIcon sx={{ fontSize: 18 }} />, to: "/app/resources?panel=support" },
+            { label: "Archive", icon: <ArchiveRoundedIcon sx={{ fontSize: 18 }} />, to: "/app/resources?panel=archive" },
             { label: "Public Site", icon: <LaunchRoundedIcon sx={{ fontSize: 18 }} />, to: "/" }
           ].map((item) => (
-            <Box
+            <ButtonBase
               key={item.label}
-              onClick={() => {
-                if (item.to) {
-                  navigate(item.to);
-                  onClose();
-                }
-              }}
+              onClick={
+                item.to
+                  ? () => {
+                      navigateShell(item.to);
+                    }
+                  : undefined
+              }
               sx={{
+                width: "100%",
                 display: "flex",
                 alignItems: "center",
+                justifyContent: "flex-start",
                 gap: 1.2,
                 cursor: item.to ? "pointer" : "default",
                 color: "#5A6A84",
@@ -241,7 +278,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               >
                 {item.label}
               </Typography>
-            </Box>
+            </ButtonBase>
           ))}
         </Stack>
       </Box>
@@ -257,32 +294,34 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: "block", md: "none" },
+          zIndex: (theme) => theme.zIndex.drawer + 2,
           "& .MuiDrawer-paper": {
             width: drawerWidth,
             boxSizing: "border-box",
             border: "none",
-            backgroundColor: "#F3FAFF"
+            backgroundColor: "#F3FAFF",
+            pointerEvents: "auto"
           }
         }}
       >
         {content}
       </Drawer>
 
-      <Drawer
-        variant="permanent"
-        open
+      <Box
+        component="aside"
         sx={{
           display: { xs: "none", md: "block" },
-          "& .MuiDrawer-paper": {
-            width: drawerWidth,
-            boxSizing: "border-box",
-            border: "none",
-            backgroundColor: "#F3FAFF"
-          }
+          position: "fixed",
+          inset: "0 auto 0 0",
+          width: drawerWidth,
+          zIndex: (theme) => theme.zIndex.drawer + 2,
+          backgroundColor: "#F3FAFF",
+          borderRight: "1px solid rgba(213,236,248,0.9)",
+          pointerEvents: "auto"
         }}
       >
         {content}
-      </Drawer>
+      </Box>
     </>
   );
 }

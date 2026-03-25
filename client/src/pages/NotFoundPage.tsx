@@ -35,7 +35,7 @@ export function NotFoundPage() {
             <Button component={RouterLink} to="/">
               Public site
             </Button>
-            <Button variant="outlined" component={RouterLink} to={isAuthenticated ? "/app" : "/login"}>
+            <Button variant="outlined" component={RouterLink} to={isAuthenticated ? "/app/dashboard" : "/login"}>
               {isAuthenticated ? "Workspace" : "Sign in"}
             </Button>
           </Stack>
@@ -44,4 +44,3 @@ export function NotFoundPage() {
     </Box>
   );
 }
-

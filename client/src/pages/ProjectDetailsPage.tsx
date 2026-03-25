@@ -3,6 +3,7 @@ import CalendarTodayRoundedIcon from "@mui/icons-material/CalendarTodayRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DescriptionRoundedIcon from "@mui/icons-material/DescriptionRounded";
 import DrawRoundedIcon from "@mui/icons-material/DrawRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import LocationOnRoundedIcon from "@mui/icons-material/LocationOnRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
@@ -15,13 +16,20 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { getProject } from "../api/projects";
+import { archiveProject, deleteProjectTeamMember, getProject } from "../api/projects";
+import { AddTeamMemberModal } from "../components/projects/AddTeamMemberModal";
+import { EditProjectModal } from "../components/projects/EditProjectModal";
+import { ProjectDocumentVaultModal } from "../components/projects/ProjectDocumentVaultModal";
+import { useAuthContext } from "../context/AuthContext";
 import { useChangeOrders } from "../hooks/useChangeOrders";
-import type { Project } from "../types/project";
+import { useProjectDocuments } from "../hooks/useProjectDocuments";
+import { useProjectTeamMembers } from "../hooks/useProjectTeamMembers";
+import type { Project, ProjectTeamMember } from "../types/project";
 import type { ChangeOrder } from "../types/changeOrder";
 import { formatCurrency } from "../utils/formatCurrency";
+import { formatDate } from "../utils/formatDate";
 
 interface RelatedChangeRow {
   id: string;
@@ -101,11 +109,62 @@ function mapChangeOrder(changeOrder: ChangeOrder): RelatedChangeRow {
   };
 }
 
+function teamMemberInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function teamMemberColor(name: string) {
+  const palette = ["#D5ECF8", "#E6F6FF", "#DBF1FE", "#CFE6F2"];
+  const hash = [...name].reduce((total, character) => total + character.charCodeAt(0), 0);
+  return palette[hash % palette.length] ?? "#E6F6FF";
+}
+
+const fallbackTeamMembers: ProjectTeamMember[] = [
+  {
+    id: "fallback-1",
+    projectId: "fallback",
+    name: "James Sterling",
+    role: "Site Lead",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "fallback-2",
+    projectId: "fallback",
+    name: "Anita Wong",
+    role: "Architecture",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "fallback-3",
+    projectId: "fallback",
+    name: "Marcus Thorne",
+    role: "Foreman",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
 export function ProjectDetailsPage() {
+  const navigate = useNavigate();
   const { projectId = "" } = useParams();
+  const { user } = useAuthContext();
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { changeOrders } = useChangeOrders(projectId);
+  const [message, setMessage] = useState("");
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const [documentVaultOpen, setDocumentVaultOpen] = useState(false);
+  const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [selectedTeamMember, setSelectedTeamMember] = useState<ProjectTeamMember | null>(null);
+  const { changeOrders } = useChangeOrders(projectId, { includeArchived: true });
+  const { teamMembers, error: teamError, refresh: refreshTeamMembers } = useProjectTeamMembers(projectId);
+  const { documents, error: documentError, refresh: refreshDocuments } = useProjectDocuments(projectId);
 
   useEffect(() => {
     getProject(projectId)
@@ -122,7 +181,30 @@ export function ProjectDetailsPage() {
   }
 
   const status = statusPresentation(project.status);
+  const canEditProject = Boolean(user && (user.role === "admin" || user.id === project.ownerId));
+  const canManageProject = canEditProject && !project.archivedAt;
   const relatedChangeRows = [...changeOrders.map(mapChangeOrder), ...fallbackChangeRows].slice(0, 3);
+  const hasRealTeamMembers = teamMembers.length > 0;
+  const displayTeamMembers = teamMembers.length > 0 ? teamMembers : fallbackTeamMembers;
+  const displayDocuments =
+    documents.length > 0
+      ? documents.slice(0, 2).map((document) => ({
+          title: document.title,
+          subtitle: `Updated ${formatDate(document.updatedAt)}`,
+          icon:
+            document.kind.toLowerCase().includes("drawing") ? (
+              <DrawRoundedIcon sx={{ color: "#7A1E08" }} />
+            ) : (
+              <DescriptionRoundedIcon sx={{ color: "#046B5E" }} />
+            )
+        }))
+      : [
+          {
+            title: "No project documents yet",
+            subtitle: "Open the vault to add the first file reference",
+            icon: <DescriptionRoundedIcon sx={{ color: "#046B5E" }} />
+          }
+        ];
   const impactValue = changeOrders.reduce((total, item) => total + item.amount, 0);
   const utilization = Math.min(64 + changeOrders.length * 4, 92);
 
@@ -135,6 +217,11 @@ export function ProjectDetailsPage() {
         backgroundSize: "24px 24px"
       }}
     >
+      {message ? <Alert severity="info">{message}</Alert> : null}
+      {project.archivedAt ? <Alert severity="warning">This project is archived and read-only.</Alert> : null}
+      {teamError ? <Alert severity="warning">{teamError}</Alert> : null}
+      {documentError ? <Alert severity="warning">{documentError}</Alert> : null}
+
       <Box
         sx={{
           display: "flex",
@@ -195,69 +282,116 @@ export function ProjectDetailsPage() {
           </Stack>
         </Box>
 
-        <Paper
-          elevation={0}
-          sx={{
-            px: 3.5,
-            py: 3,
-            minWidth: 240,
-            display: "flex",
-            gap: 2.5,
-            alignItems: "center",
-            borderRadius: 4,
-            backgroundColor: "#FFFFFF",
-            boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-          }}
-        >
-          <Box sx={{ textAlign: "right" }}>
-            <Typography
-              sx={{
-                fontSize: "0.72rem",
-                fontWeight: 900,
-                letterSpacing: 2,
-                textTransform: "uppercase",
-                color: "#93A6C3"
-              }}
-            >
-              Health Score
-            </Typography>
-            <Typography
-              sx={{
-                mt: 0.8,
-                fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                fontSize: "3.5rem",
-                fontWeight: 900,
-                letterSpacing: -2.2,
-                color: "#046B5E"
-              }}
-            >
-              98
-            </Typography>
-          </Box>
-          <Box
+        <Stack spacing={1.5} alignItems="flex-end">
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            {canManageProject ? (
+              <ButtonBase
+                onClick={() => setEditProjectOpen(true)}
+                sx={{
+                  px: 2,
+                  py: 1.1,
+                  borderRadius: 2.5,
+                  backgroundColor: "#E6F6FF",
+                  color: "#00342B"
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <EditRoundedIcon sx={{ fontSize: 18 }} />
+                  <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>Edit Project</Typography>
+                </Stack>
+              </ButtonBase>
+            ) : null}
+            {canManageProject ? (
+              <ButtonBase
+                onClick={async () => {
+                  if (!window.confirm(`Archive ${project.name}?`)) {
+                    return;
+                  }
+
+                  try {
+                    await archiveProject(project.id);
+                    navigate("/app/resources?panel=archive");
+                  } catch (requestError) {
+                    setMessage("");
+                    setError(requestError instanceof Error ? requestError.message : "Unable to archive project.");
+                  }
+                }}
+                sx={{
+                  px: 2,
+                  py: 1.1,
+                  borderRadius: 2.5,
+                  backgroundColor: "#FFDBD1",
+                  color: "#872000"
+                }}
+              >
+                <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>Archive Project</Typography>
+              </ButtonBase>
+            ) : null}
+          </Stack>
+          <Paper
+            elevation={0}
             sx={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              position: "relative",
-              display: "grid",
-              placeItems: "center",
-              border: "4px solid #9DEFDE"
+              px: 3.5,
+              py: 3,
+              minWidth: 240,
+              display: "flex",
+              gap: 2.5,
+              alignItems: "center",
+              borderRadius: 4,
+              backgroundColor: "#FFFFFF",
+              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
             }}
           >
+            <Box sx={{ textAlign: "right" }}>
+              <Typography
+                sx={{
+                  fontSize: "0.72rem",
+                  fontWeight: 900,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  color: "#93A6C3"
+                }}
+              >
+                Health Score
+              </Typography>
+              <Typography
+                sx={{
+                  mt: 0.8,
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "3.5rem",
+                  fontWeight: 900,
+                  letterSpacing: -2.2,
+                  color: "#046B5E"
+                }}
+              >
+                98
+              </Typography>
+            </Box>
             <Box
               sx={{
-                position: "absolute",
-                inset: 0,
+                width: 72,
+                height: 72,
                 borderRadius: "50%",
-                border: "4px solid #046B5E",
-                borderTopColor: "transparent",
-                transform: "rotate(-46deg)"
+                position: "relative",
+                display: "grid",
+                placeItems: "center",
+                border: "4px solid #9DEFDE"
               }}
-            />
-            <ShieldRoundedIcon sx={{ fontSize: 34, color: "#046B5E" }} />
-          </Box>
-        </Paper>
+            >
+              <Box
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "50%",
+                  border: "4px solid #046B5E",
+                  borderTopColor: "transparent",
+                  transform: "rotate(-46deg)"
+                }}
+              />
+              <ShieldRoundedIcon sx={{ fontSize: 34, color: "#046B5E" }} />
+            </Box>
+          </Paper>
+        </Stack>
       </Box>
 
       <Box
@@ -340,7 +474,10 @@ export function ProjectDetailsPage() {
               >
                 Recent Documents
               </Typography>
-              <ButtonBase sx={{ color: "#046B5E" }}>
+              <ButtonBase
+                onClick={() => setDocumentVaultOpen(true)}
+                sx={{ color: "#046B5E" }}
+              >
                 <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View All</Typography>
               </ButtonBase>
             </Stack>
@@ -352,18 +489,7 @@ export function ProjectDetailsPage() {
                 gap: 2.5
               }}
             >
-              {[
-                {
-                  title: "Structural_V4.pdf",
-                  subtitle: "Updated 2h ago",
-                  icon: <DescriptionRoundedIcon sx={{ color: "#046B5E" }} />
-                },
-                {
-                  title: "Site_Layout_Final.dwg",
-                  subtitle: "Updated yesterday",
-                  icon: <DrawRoundedIcon sx={{ color: "#7A1E08" }} />
-                }
-              ].map((document) => (
+              {displayDocuments.map((document) => (
                 <Paper
                   key={document.title}
                   elevation={0}
@@ -422,11 +548,7 @@ export function ProjectDetailsPage() {
             </Typography>
 
             <Stack direction="row" spacing={1.8} useFlexGap flexWrap="wrap">
-              {[
-                { initials: "JS", name: "James Sterling", role: "Site Lead", color: "#D5ECF8" },
-                { initials: "AW", name: "Anita Wong", role: "Architecture", color: "#E6F6FF" },
-                { initials: "MT", name: "Marcus Thorne", role: "Foreman", color: "#E6F6FF" }
-              ].map((member) => (
+              {displayTeamMembers.map((member) => (
                 <Box
                   key={member.name}
                   sx={{
@@ -437,7 +559,7 @@ export function ProjectDetailsPage() {
                     py: 1.2,
                     pr: 2.2,
                     borderRadius: 999,
-                    backgroundColor: member.color
+                    backgroundColor: teamMemberColor(member.name)
                   }}
                 >
                   <Box
@@ -452,28 +574,68 @@ export function ProjectDetailsPage() {
                       fontWeight: 800
                     }}
                   >
-                    {member.initials}
+                    {teamMemberInitials(member.name)}
                   </Box>
                   <Box>
                     <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{member.name}</Typography>
                     <Typography sx={{ mt: 0.2, fontSize: "0.72rem", fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#93A6C3" }}>
                       {member.role}
                     </Typography>
+                    {canManageProject && hasRealTeamMembers ? (
+                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.7 }}>
+                        <ButtonBase
+                          onClick={() => {
+                            setSelectedTeamMember(member);
+                            setTeamModalOpen(true);
+                          }}
+                          sx={{ color: "#046B5E" }}
+                        >
+                          <Stack direction="row" spacing={0.6} alignItems="center">
+                            <EditRoundedIcon sx={{ fontSize: 14 }} />
+                            <Typography sx={{ fontSize: "0.72rem", fontWeight: 800 }}>Edit</Typography>
+                          </Stack>
+                        </ButtonBase>
+                        <ButtonBase
+                          onClick={async () => {
+                            if (!window.confirm(`Remove ${member.name} from this project?`)) {
+                              return;
+                            }
+
+                            try {
+                              await deleteProjectTeamMember(project.id, member.id);
+                              await refreshTeamMembers();
+                              setMessage("Team member removed from the roster.");
+                            } catch (requestError) {
+                              setError(requestError instanceof Error ? requestError.message : "Unable to remove team member.");
+                            }
+                          }}
+                          sx={{ color: "#872000" }}
+                        >
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 800 }}>Remove</Typography>
+                        </ButtonBase>
+                      </Stack>
+                    ) : null}
                   </Box>
                 </Box>
               ))}
 
-              <ButtonBase
-                sx={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: "50%",
-                  border: "2px dashed rgba(191,201,196,0.8)",
-                  color: "#93A6C3"
-                }}
-              >
-                <Typography sx={{ fontSize: "2rem", lineHeight: 1 }}>+</Typography>
-              </ButtonBase>
+              {canManageProject ? (
+                <ButtonBase
+                  onClick={() => {
+                    setSelectedTeamMember(null);
+                    setTeamModalOpen(true);
+                  }}
+                  sx={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: "50%",
+                    border: "2px dashed rgba(191,201,196,0.8)",
+                    color: "#93A6C3"
+                  }}
+                >
+                  <Typography sx={{ fontSize: "2rem", lineHeight: 1 }}>+</Typography>
+                </ButtonBase>
+              ) : null}
             </Stack>
           </Paper>
         </Stack>
@@ -612,13 +774,19 @@ export function ProjectDetailsPage() {
             {relatedChangeRows.map((row, index) => (
               <Box
                 key={row.id}
+                onClick={() => navigate(`/app/change-orders?projectId=${projectId}`)}
                 sx={{
                   display: "grid",
                   gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr",
                   alignItems: "center",
                   px: 4,
                   py: 3.1,
-                  backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF"
+                  cursor: "pointer",
+                  backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF",
+                  transition: "background-color 160ms ease",
+                  "&:hover": {
+                    backgroundColor: "#F3FAFF"
+                  }
                 }}
               >
                 <Typography sx={{ fontSize: "0.94rem", fontWeight: 800, color: "#00342B" }}>{row.id}</Typography>
@@ -653,7 +821,10 @@ export function ProjectDetailsPage() {
               </Box>
             ))}
 
-            <ButtonBase sx={{ width: "100%", py: 2.6, backgroundColor: "#D5ECF8", color: "#046B5E" }}>
+            <ButtonBase
+              onClick={() => navigate(`/app/change-orders?projectId=${projectId}`)}
+              sx={{ width: "100%", py: 2.6, backgroundColor: "#D5ECF8", color: "#046B5E" }}
+            >
               <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View Full Change History</Typography>
             </ButtonBase>
           </Paper>
@@ -675,7 +846,14 @@ export function ProjectDetailsPage() {
                   "linear-gradient(135deg, rgba(123,174,205,0.9) 0%, rgba(179,214,194,0.9) 100%)"
               }}
             />
-            <Box
+            <ButtonBase
+              onClick={() => {
+                window.open(
+                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.location)}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }}
               sx={{
                 m: 2.2,
                 px: 2.2,
@@ -692,12 +870,46 @@ export function ProjectDetailsPage() {
                 Site Address: 1202 Georgia St.
               </Typography>
               <OpenInNewRoundedIcon sx={{ color: "#046B5E" }} />
-            </Box>
+            </ButtonBase>
           </Paper>
         </Stack>
       </Box>
 
       <FooterLinks />
+
+      <AddTeamMemberModal
+        open={teamModalOpen}
+        projectId={projectId}
+        teamMember={selectedTeamMember}
+        onClose={() => {
+          setTeamModalOpen(false);
+          setSelectedTeamMember(null);
+        }}
+        onCreated={async () => {
+          await refreshTeamMembers();
+          setMessage(selectedTeamMember ? "Team member updated." : "Team member added to the on-site roster.");
+        }}
+      />
+      <EditProjectModal
+        open={editProjectOpen}
+        project={project}
+        onClose={() => setEditProjectOpen(false)}
+        onSaved={async (updatedProject) => {
+          setProject(updatedProject);
+          setMessage("Project details updated.");
+        }}
+      />
+      <ProjectDocumentVaultModal
+        open={documentVaultOpen}
+        project={project}
+        documents={documents}
+        canEdit={canManageProject}
+        onClose={() => setDocumentVaultOpen(false)}
+        onCreated={async () => {
+          await refreshDocuments();
+          setMessage("Project vault updated.");
+        }}
+      />
     </Stack>
   );
 }

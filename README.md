@@ -9,7 +9,7 @@ A student-friendly fullstack starter for a construction workflow SaaS focused on
 - Database: PostgreSQL with Prisma
 - Auth: JWT
 - Integrations: Slack webhook, email, mock external sync
-- AI add-on: OpenAI summary generation hook point
+- AI add-on: Anthropic Claude summary generation with local fallback
 
 ## Project structure
 
@@ -31,6 +31,7 @@ changeflow-platform/
 - CSV import job scaffold for ETL-style workflows
 - Audit logging service for traceability
 - Material UI frontend shell with dashboard, projects, and integrations pages
+- Secure local auth flow with hashed passwords, self-service access requests, and password reset
 
 ## Getting started
 
@@ -72,9 +73,17 @@ changeflow-platform/
    demo@changeflow.dev / password123
    ```
 
+## Auth flows
+
+- `Log In` works against hashed local user records in Postgres.
+- `Request Platform Access` creates a new local account and signs the user in immediately.
+- `Forgot Password` sends a real reset email when `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` are configured.
+- If email is not configured, the reset flow automatically falls back to local preview mode and exposes the reset token in the UI for development.
+- New account signups and change-order status updates also use the same email delivery service.
+
 ## Suggested next steps
 
 - Replace stubbed repository logic with live Prisma queries everywhere
 - Add BullMQ for background job processing
-- Connect Slack, email, and OpenAI credentials
+- Connect Slack, email, and Anthropic Claude credentials
 - Add tests and GitHub Actions CI

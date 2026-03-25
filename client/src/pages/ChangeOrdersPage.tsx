@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AddCircleRoundedIcon from "@mui/icons-material/AddCircleRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import FilterAltRoundedIcon from "@mui/icons-material/FilterAltRounded";
@@ -14,63 +14,75 @@ import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { CreateChangeOrderModal } from "../components/change-orders/CreateChangeOrderModal";
+import { ImportChangeOrdersModal } from "../components/change-orders/ImportChangeOrdersModal";
 import { useChangeOrders } from "../hooks/useChangeOrders";
 import { useProjects } from "../hooks/useProjects";
 import type { ChangeOrder } from "../types/changeOrder";
 import { formatCurrency } from "../utils/formatCurrency";
 
 type PipelineStatus = "pending" | "approved" | "disputed";
+const pageSizeOptions = [4, 8, 12, 20] as const;
 
 interface PipelineRow {
   id: string;
+  projectId: string;
   reference: string;
   revision: string;
+  title: string;
   project: string;
   vendor: string;
+  assignedTo?: string;
   submittedAt: string;
   value: number;
   status: PipelineStatus;
+  attachmentCount: number;
 }
-
-const summaryCards = [
-  { label: "Pending Review", value: "12", accent: "#00342B", color: "#00342B" },
-  { label: "Approved Today", value: "08", accent: "#046B5E", color: "#046B5E" },
-  { label: "Disputed", value: "03", accent: "#7A1E08", color: "#7A1E08" }
-] as const;
 
 const supplementalRows: PipelineRow[] = [
   {
     id: "co_8842",
+    projectId: "prj_riv_007",
     reference: "CO-8842",
     revision: "REV-1.2",
+    title: "Mechanical Coordination",
     project: "River Crossing",
     vendor: "Modern HVAC",
+    assignedTo: "Rachel Stone",
     submittedAt: "2026-03-22T09:15:00-04:00",
     value: 12850,
-    status: "approved"
+    status: "approved",
+    attachmentCount: 1
   },
   {
     id: "co_9945",
+    projectId: "prj_hub_002",
     reference: "CO-9945",
     revision: "REV-0.1",
+    title: "Foundation Overrun",
     project: "Hudson Yards II",
     vendor: "Elite Concrete",
+    assignedTo: "Executive Review Board",
     submittedAt: "2026-03-21T16:45:00-04:00",
     value: 124000,
-    status: "disputed"
+    status: "disputed",
+    attachmentCount: 3
   },
   {
     id: "co_1002",
+    projectId: "prj_sky_001",
     reference: "CO-1002",
     revision: "REV-2.3",
+    title: "Site Drainage Adjustment",
     project: "Skyline Tower",
     vendor: "Apex Steel Co.",
+    assignedTo: "Marcus Chen",
     submittedAt: "2026-03-20T11:00:00-04:00",
     value: 8210,
-    status: "pending"
+    status: "pending",
+    attachmentCount: 2
   }
 ];
 
@@ -442,43 +454,111 @@ function EmptyState({
 }
 
 export function ChangeOrdersPage() {
+  const navigate = useNavigate();
   const { changeOrders, error, refresh } = useChangeOrders();
   const { projects } = useProjects();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [projectFilter, setProjectFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState(searchParams.get("projectId") ?? "all");
   const [vendorFilter, setVendorFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | PipelineStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | PipelineStatus>(
+    searchParams.get("status") === "pending" ||
+      searchParams.get("status") === "approved" ||
+      searchParams.get("status") === "disputed"
+      ? (searchParams.get("status") as PipelineStatus)
+      : "all"
+  );
+  const [pageSize, setPageSize] = useState<number>(8);
+  const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const searchQuery = searchParams.get("search")?.trim().toLowerCase() ?? "";
 
   const projectLookup = Object.fromEntries(projects.map((project) => [project.id, project.name]));
 
   const liveRows: PipelineRow[] = changeOrders.map((changeOrder, index) => ({
     id: changeOrder.id,
+    projectId: changeOrder.projectId,
     reference: formatReference(changeOrder.id),
     revision: `REV-${index + 1}.0`,
+    title: changeOrder.title,
     project: projectLookup[changeOrder.projectId] ?? "Harbor 26 Tower",
     vendor: changeOrder.requestedBy === "Demo User" ? "Owner Request" : changeOrder.requestedBy,
+    assignedTo: changeOrder.assignedTo,
     submittedAt: changeOrder.updatedAt,
     value: changeOrder.amount,
-    status: mapChangeOrderStatus(changeOrder.status)
+    status: mapChangeOrderStatus(changeOrder.status),
+    attachmentCount: changeOrder.attachments.length
   }));
 
   const openCreateModal = searchParams.get("new") === "1";
-  const showEmptyState = searchParams.get("empty") === "1" || liveRows.length === 0;
+  const defaultProjectId = searchParams.get("projectId") ?? undefined;
+  const pipelineRows = liveRows.length > 0 ? liveRows : supplementalRows;
+  const showEmptyState = searchParams.get("empty") === "1" || pipelineRows.length === 0;
 
-  const pipelineRows = [...liveRows, ...supplementalRows].slice(0, 4);
-  const projectOptions = ["all", ...new Set(pipelineRows.map((row) => row.project))];
+  const projectOptions = ["all", ...new Set(pipelineRows.map((row) => row.projectId))];
   const vendorOptions = ["all", ...new Set(pipelineRows.map((row) => row.vendor))];
 
   const filteredRows = pipelineRows.filter((row) => {
-    const projectMatches = projectFilter === "all" || row.project === projectFilter;
+    const projectMatches = projectFilter === "all" || row.projectId === projectFilter;
     const vendorMatches = vendorFilter === "all" || row.vendor === vendorFilter;
     const statusMatches = statusFilter === "all" || row.status === statusFilter;
+    const searchMatches =
+      searchQuery.length === 0 ||
+      row.reference.toLowerCase().includes(searchQuery) ||
+      row.title.toLowerCase().includes(searchQuery) ||
+      row.project.toLowerCase().includes(searchQuery) ||
+      row.vendor.toLowerCase().includes(searchQuery) ||
+      row.assignedTo?.toLowerCase().includes(searchQuery);
 
-    return projectMatches && vendorMatches && statusMatches;
+    return projectMatches && vendorMatches && statusMatches && Boolean(searchMatches);
   });
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1);
 
   const exposureAlertCount = pipelineRows.filter((row) => row.value >= 50000).length;
+  const summaryCards = [
+    {
+      label: "Pending Review",
+      value: String(pipelineRows.filter((row) => row.status === "pending").length).padStart(2, "0"),
+      accent: "#00342B",
+      color: "#00342B"
+    },
+    {
+      label: "Approved Today",
+      value: String(pipelineRows.filter((row) => row.status === "approved").length).padStart(2, "0"),
+      accent: "#046B5E",
+      color: "#046B5E"
+    },
+    {
+      label: "Disputed",
+      value: String(pipelineRows.filter((row) => row.status === "disputed").length).padStart(2, "0"),
+      accent: "#7A1E08",
+      color: "#7A1E08"
+    }
+  ] as const;
+
+  useEffect(() => {
+    const nextProjectFilter = searchParams.get("projectId") ?? "all";
+    setProjectFilter(nextProjectFilter);
+    const nextStatusFilter = searchParams.get("status");
+    setStatusFilter(
+      nextStatusFilter === "pending" || nextStatusFilter === "approved" || nextStatusFilter === "disputed"
+        ? nextStatusFilter
+        : "all"
+    );
+  }, [searchParams]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [projectFilter, vendorFilter, statusFilter, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   function setModalState(open: boolean) {
     const next = new URLSearchParams(searchParams);
@@ -492,14 +572,27 @@ export function ChangeOrdersPage() {
     setSearchParams(next);
   }
 
-  async function handleCreated() {
+  async function handleCreated(createdChangeOrder: ChangeOrder) {
     await refresh();
 
     const next = new URLSearchParams(searchParams);
     next.delete("new");
     next.delete("empty");
     setSearchParams(next);
-    setMessage("Change order created and submitted into the review pipeline.");
+    setMessage(
+      createdChangeOrder.aiSummary
+        ? `Change order created. Claude summary: ${createdChangeOrder.aiSummary}`
+        : "Change order created and submitted into the review pipeline."
+    );
+  }
+
+  async function handleImported(importedCount: number) {
+    await refresh();
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("empty");
+    setSearchParams(next);
+    setMessage(`Imported ${importedCount} change order${importedCount === 1 ? "" : "s"} into the pipeline.`);
   }
 
   if (showEmptyState) {
@@ -510,7 +603,7 @@ export function ChangeOrdersPage() {
 
         <EmptyState
           onCreate={() => setModalState(true)}
-          onImport={() => setMessage("CSV import is staged for the next backend pass.")}
+          onImport={() => setImportModalOpen(true)}
         />
 
         <CreateChangeOrderModal
@@ -518,6 +611,13 @@ export function ChangeOrdersPage() {
           onClose={() => setModalState(false)}
           onCreated={handleCreated}
           projects={projects}
+          defaultProjectId={defaultProjectId}
+        />
+        <ImportChangeOrdersModal
+          open={importModalOpen}
+          onClose={() => setImportModalOpen(false)}
+          projects={projects}
+          onImported={handleImported}
         />
       </>
     );
@@ -638,7 +738,7 @@ export function ChangeOrdersPage() {
                     >
                       {projectOptions.map((project) => (
                         <MenuItem key={project} value={project}>
-                          {project === "all" ? "All Projects" : project}
+                          {project === "all" ? "All Projects" : (projectLookup[project] ?? project)}
                         </MenuItem>
                       ))}
                     </Select>
@@ -695,6 +795,7 @@ export function ChangeOrdersPage() {
                     {[
                       { value: "all", label: "All" },
                       { value: "pending", label: "Pending" },
+                      { value: "approved", label: "Approved" },
                       { value: "disputed", label: "Disputed" }
                     ].map((option) => {
                       const active = statusFilter === option.value;
@@ -735,6 +836,36 @@ export function ChangeOrdersPage() {
                 >
                   <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>Clear All</Typography>
                 </ButtonBase>
+
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
+                  <ButtonBase
+                    onClick={() => setModalState(true)}
+                    sx={{
+                      flex: 1,
+                      minWidth: 140,
+                      py: 1.4,
+                      borderRadius: 2.5,
+                      backgroundColor: "#00342B",
+                      color: "#FFFFFF"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>New Change Order</Typography>
+                  </ButtonBase>
+
+                  <ButtonBase
+                    onClick={() => setImportModalOpen(true)}
+                    sx={{
+                      flex: 1,
+                      minWidth: 140,
+                      py: 1.4,
+                      borderRadius: 2.5,
+                      backgroundColor: "#CFE6F2",
+                      color: "#00342B"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>Import CSV</Typography>
+                  </ButtonBase>
+                </Stack>
               </Stack>
             </Paper>
 
@@ -760,21 +891,30 @@ export function ChangeOrdersPage() {
               >
                 Exposure Alert
               </Typography>
-              <Typography sx={{ mt: 1.5, fontSize: "1.02rem", lineHeight: 1.55, color: "rgba(255,255,255,0.86)" }}>
+                <Typography sx={{ mt: 1.5, fontSize: "1.02rem", lineHeight: 1.55, color: "rgba(255,255,255,0.86)" }}>
                 You have {exposureAlertCount} high-value change orders exceeding $50k that require executive sign-off.
               </Typography>
-              <Typography
-                sx={{
-                  mt: 4,
-                  fontSize: "0.92rem",
-                  fontWeight: 900,
-                  letterSpacing: 1.6,
-                  textTransform: "uppercase",
-                  textDecoration: "underline"
+              <ButtonBase
+                onClick={() => {
+                  setProjectFilter("all");
+                  setVendorFilter("all");
+                  setStatusFilter("pending");
+                  setMessage("Focused the table on change orders that still need executive review.");
                 }}
+                sx={{ mt: 4, color: "#FFFFFF", borderRadius: 2 }}
               >
-                Review Now
-              </Typography>
+                <Typography
+                  sx={{
+                    fontSize: "0.92rem",
+                    fontWeight: 900,
+                    letterSpacing: 1.6,
+                    textTransform: "uppercase",
+                    textDecoration: "underline"
+                  }}
+                >
+                  Review Now
+                </Typography>
+              </ButtonBase>
             </Paper>
           </Stack>
 
@@ -814,19 +954,33 @@ export function ChangeOrdersPage() {
                   ))}
                 </Box>
 
-                {filteredRows.map((row, index) => {
+                {pagedRows.length === 0 ? (
+                  <Box sx={{ px: 4.5, py: 5 }}>
+                    <Typography sx={{ fontSize: "1rem", color: "#42536D" }}>
+                      No change orders match the current filters.
+                    </Typography>
+                  </Box>
+                ) : null}
+
+                {pagedRows.map((row, index) => {
                   const submitted = formatSubmittedAt(row.submittedAt);
 
                   return (
                     <Box
                       key={row.id}
+                      onClick={() => navigate(`/app/change-orders/${row.id}`)}
                       sx={{
                         display: "grid",
                         gridTemplateColumns: "1.1fr 1.3fr 1fr 1fr 0.9fr 0.3fr",
                         alignItems: "center",
                         px: 4.5,
                         py: 3.5,
-                        backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF"
+                        cursor: "pointer",
+                        backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF",
+                        transition: "background-color 160ms ease",
+                        "&:hover": {
+                          backgroundColor: "#F3FAFF"
+                        }
                       }}
                     >
                       <Box>
@@ -841,11 +995,22 @@ export function ChangeOrdersPage() {
                           {row.reference}
                         </Typography>
                         <Typography sx={{ mt: 0.7, fontSize: "0.88rem", color: "#707975" }}>{row.revision}</Typography>
+                        {row.attachmentCount > 0 ? (
+                          <Typography sx={{ mt: 0.45, fontSize: "0.8rem", fontWeight: 700, color: "#046B5E" }}>
+                            {row.attachmentCount} attachment{row.attachmentCount === 1 ? "" : "s"}
+                          </Typography>
+                        ) : null}
                       </Box>
 
                       <Box>
                         <Typography sx={{ fontSize: "1.02rem", fontWeight: 800, color: "#071E27" }}>{row.project}</Typography>
+                        <Typography sx={{ mt: 0.4, fontSize: "0.92rem", fontWeight: 700, color: "#00342B" }}>{row.title}</Typography>
                         <Typography sx={{ mt: 0.5, fontSize: "0.96rem", color: "#42536D" }}>{row.vendor}</Typography>
+                        {row.assignedTo ? (
+                          <Typography sx={{ mt: 0.45, fontSize: "0.82rem", fontWeight: 700, color: "#046B5E" }}>
+                            Assigned to {row.assignedTo}
+                          </Typography>
+                        ) : null}
                       </Box>
 
                       <Box>
@@ -884,35 +1049,69 @@ export function ChangeOrdersPage() {
                   }}
                 >
                   <Typography sx={{ fontSize: "1rem", color: "#42536D" }}>
-                    Showing {filteredRows.length} of {pipelineRows.length} change orders
+                    Showing {(currentPage - 1) * pageSize + (filteredRows.length === 0 ? 0 : 1)}-
+                    {Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length} change orders
                   </Typography>
-                  <Stack direction="row" spacing={1.4} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 48,
-                        height: 48,
-                        display: "grid",
-                        placeItems: "center",
-                        borderRadius: 2.5,
-                        backgroundColor: "#F3FAFF",
-                        color: "#7A869F"
-                      }}
-                    >
-                      ‹
-                    </Box>
-                    <Box
-                      sx={{
-                        width: 48,
-                        height: 48,
-                        display: "grid",
-                        placeItems: "center",
-                        borderRadius: 2.5,
-                        backgroundColor: "#FFFFFF",
-                        color: "#00342B"
-                      }}
-                    >
-                      ›
-                    </Box>
+                  <Stack direction="row" spacing={1.8} alignItems="center" useFlexGap flexWrap="wrap">
+                    <Stack direction="row" spacing={1.1} alignItems="center">
+                      <Typography
+                        sx={{
+                          fontSize: "0.84rem",
+                          fontWeight: 800,
+                          letterSpacing: 1.6,
+                          textTransform: "uppercase",
+                          color: "#5A6A84"
+                        }}
+                      >
+                        Rows
+                      </Typography>
+                      <FormControl size="small">
+                        <Select
+                          value={pageSize}
+                          onChange={(event) => setPageSize(Number(event.target.value))}
+                          IconComponent={KeyboardArrowDownRoundedIcon}
+                          sx={{
+                            minWidth: 82,
+                            backgroundColor: "#FFFFFF",
+                            borderRadius: 2.5,
+                            fontWeight: 700,
+                            color: "#00342B",
+                            "& .MuiOutlinedInput-notchedOutline": {
+                              borderColor: "rgba(191,201,196,0.35)"
+                            }
+                          }}
+                        >
+                          {pageSizeOptions.map((option) => (
+                            <MenuItem key={option} value={option}>
+                              {option}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.4} alignItems="center">
+                    <PageButton
+                      label="‹"
+                      disabled={currentPage === 1}
+                      active={false}
+                      onClick={() => setPage((value) => Math.max(1, value - 1))}
+                    />
+                    {pageNumbers.map((pageNumber) => (
+                      <PageButton
+                        key={pageNumber}
+                        label={String(pageNumber)}
+                        active={currentPage === pageNumber}
+                        onClick={() => setPage(pageNumber)}
+                      />
+                    ))}
+                    <PageButton
+                      label="›"
+                      disabled={currentPage === totalPages}
+                      active={false}
+                      onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                    />
+                    </Stack>
                   </Stack>
                 </Box>
               </Box>
@@ -928,7 +1127,41 @@ export function ChangeOrdersPage() {
         onClose={() => setModalState(false)}
         onCreated={handleCreated}
         projects={projects}
+        defaultProjectId={defaultProjectId}
+      />
+      <ImportChangeOrdersModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        projects={projects}
+        onImported={handleImported}
       />
     </>
+  );
+}
+
+function PageButton({
+  label,
+  onClick,
+  active,
+  disabled = false
+}: {
+  label: string;
+  onClick: () => void;
+  active: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <ButtonBase
+      onClick={disabled ? undefined : onClick}
+      sx={{
+        width: 48,
+        height: 48,
+        borderRadius: 2.5,
+        backgroundColor: active ? "#FFFFFF" : "#F3FAFF",
+        color: disabled ? "#B7C4D8" : active ? "#00342B" : "#7A869F"
+      }}
+    >
+      <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>{label}</Typography>
+    </ButtonBase>
   );
 }

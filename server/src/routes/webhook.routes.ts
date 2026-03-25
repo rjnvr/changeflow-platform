@@ -2,9 +2,9 @@ import { Router } from "express";
 
 import { webhookController } from "../controllers/webhook.controller.js";
 import { validate } from "../middleware/validate.middleware.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 import { webhookPayloadSchema } from "../validators/integration.schemas.js";
 
 export const webhookRouter = Router();
 
-webhookRouter.post("/external-system", validate(webhookPayloadSchema), webhookController.receive);
-
+webhookRouter.post("/external-system", validate(webhookPayloadSchema), asyncHandler(webhookController.receive));

@@ -33,14 +33,14 @@ const theme = createTheme({
     h6: { fontFamily: '"Space Grotesk", "Segoe UI", sans-serif', fontWeight: 700, letterSpacing: -0.4 }
   },
   shape: {
-    borderRadius: 22
+    borderRadius: 4
   },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: "none",
-          borderRadius: 16,
+          borderRadius: 12,
           paddingInline: 18,
           paddingBlock: 10,
           fontWeight: 700,
@@ -54,15 +54,14 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           border: "1px solid rgba(15, 23, 42, 0.08)",
-          boxShadow: "0 20px 40px rgba(15, 23, 42, 0.05)",
-          overflow: "hidden"
+          boxShadow: "0 20px 40px rgba(15, 23, 42, 0.05)"
         }
       }
     },
     MuiChip: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: 10,
           maxWidth: "100%",
           height: "auto"
         },
