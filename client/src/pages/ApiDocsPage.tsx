@@ -40,7 +40,10 @@ const endpointGroups: EndpointGroup[] = [
       { method: "POST", path: "/auth/reset-password", summary: "Reset a password using token + email." },
       { method: "GET", path: "/auth/me", summary: "Load the current authenticated user." },
       { method: "PATCH", path: "/auth/me", summary: "Update profile details." },
-      { method: "POST", path: "/auth/change-password", summary: "Change password while logged in." }
+      { method: "POST", path: "/auth/change-password", summary: "Change password while logged in." },
+      { method: "GET", path: "/auth/brief-quotas", summary: "Admin-only project brief quota dashboard." },
+      { method: "PATCH", path: "/auth/brief-quotas/apply-to-all", summary: "Admin-only apply a daily brief limit across all users." },
+      { method: "PATCH", path: "/auth/users/:userId/brief-quota", summary: "Admin-only update of a user's daily project brief limit." }
     ]
   },
   {
@@ -53,6 +56,7 @@ const endpointGroups: EndpointGroup[] = [
       { method: "PATCH", path: "/projects/:projectId", summary: "Update project details." },
       { method: "POST", path: "/projects/:projectId/archive", summary: "Archive a project and lock it read-only." },
       { method: "GET", path: "/projects/:projectId/team", summary: "Load the project team roster." },
+      { method: "POST", path: "/projects/:projectId/brief", summary: "Generate a Claude-powered project analytics brief." },
       { method: "POST", path: "/projects/:projectId/team", summary: "Add an on-site team member." },
       { method: "DELETE", path: "/projects/:projectId/team/:teamMemberId", summary: "Remove a team member." },
       { method: "GET", path: "/projects/:projectId/documents", summary: "List project vault documents." },

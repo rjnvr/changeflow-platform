@@ -27,7 +27,7 @@ import {
   deleteProjectDocument,
   getProjectDocumentDownloadUrl
 } from "../../api/projects";
-import type { Project, ProjectDocument } from "../../types/project";
+import type { Project, ProjectDocument, ProjectTeamMember } from "../../types/project";
 import { formatDate } from "../../utils/formatDate";
 import { Button } from "../common/Button";
 import { EditProjectDocumentModal } from "./EditProjectDocumentModal";
@@ -49,6 +49,7 @@ const fieldStyles = {
 } as const;
 
 const kindOptions = ["PDF", "Drawing", "Quote", "Report", "Photo Set", "Spec"] as const;
+const AUTO_ASSIGN_OPTION = "__AUTO_ASSIGN__";
 
 function getUploadErrorMessage(fileName: string, error: unknown) {
   if (error instanceof TypeError) {
@@ -80,6 +81,7 @@ interface ProjectDocumentVaultModalProps {
   open: boolean;
   project: Project;
   documents: ProjectDocument[];
+  teamMembers: ProjectTeamMember[];
   onClose: () => void;
   onCreated?: () => Promise<void> | void;
   canEdit?: boolean;
@@ -89,6 +91,7 @@ export function ProjectDocumentVaultModal({
   open,
   project,
   documents,
+  teamMembers,
   onClose,
   onCreated,
   canEdit = false
@@ -97,6 +100,7 @@ export function ProjectDocumentVaultModal({
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<string>("PDF");
   const [summary, setSummary] = useState("");
+  const [assignedTo, setAssignedTo] = useState(AUTO_ASSIGN_OPTION);
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +108,14 @@ export function ProjectDocumentVaultModal({
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [editingDocument, setEditingDocument] = useState<ProjectDocument | null>(null);
   const [error, setError] = useState("");
+
+  const assigneeOptions = Array.from(
+    new Set(
+      teamMembers
+        .map((member) => member.name.trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right));
 
   useEffect(() => {
     if (!open) {
@@ -113,6 +125,7 @@ export function ProjectDocumentVaultModal({
     setTitle("");
     setKind("PDF");
     setSummary("");
+    setAssignedTo(AUTO_ASSIGN_OPTION);
     setUrl("");
     setFile(null);
     setError("");
@@ -210,6 +223,7 @@ export function ProjectDocumentVaultModal({
         title: title.trim(),
         kind,
         summary: summary.trim(),
+        assignedTo: assignedTo === AUTO_ASSIGN_OPTION ? undefined : assignedTo,
         url: file ? undefined : url.trim() || undefined,
         storageKey: nextStorageKey,
         fileName: nextFileName,
@@ -220,6 +234,7 @@ export function ProjectDocumentVaultModal({
       setTitle("");
       setKind("PDF");
       setSummary("");
+      setAssignedTo(AUTO_ASSIGN_OPTION);
       setUrl("");
       setFile(null);
     } catch (requestError) {
@@ -380,6 +395,16 @@ export function ProjectDocumentVaultModal({
                             >
                               {document.kind} • Updated {formatDate(document.updatedAt)}
                             </Typography>
+                            <Typography
+                              sx={{
+                                mt: 0.65,
+                                fontSize: "0.82rem",
+                                fontWeight: 700,
+                                color: document.assignedTo ? "#046B5E" : "#7A869F"
+                              }}
+                            >
+                              {document.assignedTo ? `Assigned to ${document.assignedTo}` : "Auto-assignment pending"}
+                            </Typography>
                           </Box>
 
                           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -526,6 +551,27 @@ export function ProjectDocumentVaultModal({
                   sx={fieldStyles}
                 />
                 <TextField
+                  select
+                  fullWidth
+                  label="Assign To"
+                  value={assignedTo}
+                  onChange={(event) => setAssignedTo(event.target.value)}
+                  SelectProps={{ native: true }}
+                  sx={fieldStyles}
+                >
+                  <option value={AUTO_ASSIGN_OPTION}>Auto-assign based on document type</option>
+                  {assigneeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </TextField>
+                <Typography sx={{ mt: -1, fontSize: "0.82rem", color: "#5A6A84" }}>
+                  {assigneeOptions.length > 0
+                    ? "Choose a teammate now, or let ChangeFlow route the document automatically from its title, type, and summary."
+                    : "Manual assignment unlocks once project team members are added. Until then, ChangeFlow will keep the document unassigned."}
+                </Typography>
+                <TextField
                   fullWidth
                   label="Optional Link"
                   value={url}
@@ -607,6 +653,7 @@ export function ProjectDocumentVaultModal({
           open={Boolean(editingDocument)}
           projectId={project.id}
           document={editingDocument}
+          teamMembers={teamMembers}
           onClose={() => setEditingDocument(null)}
           onSaved={async () => {
             await onCreated?.();

@@ -25,6 +25,7 @@ projectRouter.patch(
   validate(bulkUpdateProjectStatusSchema),
   asyncHandler(projectController.bulkUpdateStatus)
 );
+projectRouter.post("/:projectId/brief", asyncHandler(projectController.generateBrief));
 projectRouter.post("/:projectId/archive", asyncHandler(projectController.archive));
 projectRouter.patch("/:projectId", validate(updateProjectSchema), asyncHandler(projectController.update));
 projectRouter.get("/:projectId", asyncHandler(projectController.get));

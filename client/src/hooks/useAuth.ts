@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   changePassword as changePasswordRequest,
@@ -29,6 +29,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    let active = true;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
     if (!token || user) {
@@ -38,12 +39,31 @@ export function useAuth() {
     setLoading(true);
     getCurrentUser()
       .then((currentUser) => {
-        startTransition(() => {
-          setUser(currentUser);
-          localStorage.setItem(AUTH_USER_KEY, JSON.stringify(currentUser));
-        });
+        if (!active) {
+          return;
+        }
+
+        setUser(currentUser);
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(currentUser));
       })
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_USER_KEY);
+        setUser(null);
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [user]);
 
   async function login(email: string, password: string) {
@@ -54,10 +74,7 @@ export function useAuth() {
 
       localStorage.setItem(AUTH_TOKEN_KEY, response.token);
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
-
-      startTransition(() => {
-        setUser(response.user);
-      });
+      setUser(response.user);
 
       return response.user;
     } finally {
@@ -78,10 +95,7 @@ export function useAuth() {
 
       localStorage.setItem(AUTH_TOKEN_KEY, response.token);
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
-
-      startTransition(() => {
-        setUser(response.user);
-      });
+      setUser(response.user);
 
       return response.user;
     } finally {
@@ -92,7 +106,8 @@ export function useAuth() {
   function logout() {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
-    startTransition(() => setUser(null));
+    setLoading(false);
+    setUser(null);
   }
 
   async function updateProfile(input: {
@@ -107,10 +122,7 @@ export function useAuth() {
 
       localStorage.setItem(AUTH_TOKEN_KEY, response.token);
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
-
-      startTransition(() => {
-        setUser(response.user);
-      });
+      setUser(response.user);
 
       return response.user;
     } finally {

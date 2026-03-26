@@ -9,7 +9,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import { updateProjectDocument } from "../../api/projects";
-import type { ProjectDocument } from "../../types/project";
+import type { ProjectDocument, ProjectTeamMember } from "../../types/project";
 import { Button } from "../common/Button";
 
 const fieldStyles = {
@@ -29,11 +29,13 @@ const fieldStyles = {
 } as const;
 
 const kindOptions = ["PDF", "Drawing", "Quote", "Report", "Photo Set", "Spec"] as const;
+const AUTO_ASSIGN_OPTION = "__AUTO_ASSIGN__";
 
 interface EditProjectDocumentModalProps {
   open: boolean;
   projectId: string;
   document: ProjectDocument;
+  teamMembers: ProjectTeamMember[];
   onClose: () => void;
   onSaved?: () => Promise<void> | void;
 }
@@ -42,6 +44,7 @@ export function EditProjectDocumentModal({
   open,
   projectId,
   document,
+  teamMembers,
   onClose,
   onSaved
 }: EditProjectDocumentModalProps) {
@@ -49,8 +52,17 @@ export function EditProjectDocumentModal({
   const [kind, setKind] = useState(document.kind);
   const [summary, setSummary] = useState(document.summary);
   const [url, setUrl] = useState(document.url ?? "");
+  const [assignedTo, setAssignedTo] = useState(document.assignedTo ?? AUTO_ASSIGN_OPTION);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const assigneeOptions = Array.from(
+    new Set(
+      [document.assignedTo, ...teamMembers.map((member) => member.name)]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  ).sort((left, right) => left.localeCompare(right));
 
   useEffect(() => {
     if (!open) {
@@ -61,6 +73,7 @@ export function EditProjectDocumentModal({
     setKind(document.kind);
     setSummary(document.summary);
     setUrl(document.url ?? "");
+    setAssignedTo(document.assignedTo ?? AUTO_ASSIGN_OPTION);
     setError("");
   }, [document, open]);
 
@@ -80,6 +93,7 @@ export function EditProjectDocumentModal({
         title: title.trim(),
         kind: kind.trim(),
         summary: summary.trim(),
+        assignedTo: assignedTo === AUTO_ASSIGN_OPTION ? undefined : assignedTo,
         url: document.storageKey ? undefined : url.trim() || undefined
       });
       await onSaved?.();
@@ -177,6 +191,27 @@ export function EditProjectDocumentModal({
             onChange={(event) => setSummary(event.target.value)}
             sx={fieldStyles}
           />
+          <TextField
+            fullWidth
+            select
+            label="Assign To"
+            value={assignedTo}
+            onChange={(event) => setAssignedTo(event.target.value)}
+            SelectProps={{ native: true }}
+            sx={fieldStyles}
+          >
+            <option value={AUTO_ASSIGN_OPTION}>Auto-assign based on document type</option>
+            {assigneeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </TextField>
+          <Typography sx={{ mt: -1, fontSize: "0.82rem", color: "#5A6A84" }}>
+            {assigneeOptions.length > 0
+              ? "Choose a teammate directly, or leave it on auto-assign so ChangeFlow routes the doc by role."
+              : "Add project team members to enable manual document assignment. Auto-assign stays available."}
+          </Typography>
           <TextField
             fullWidth
             label={document.storageKey ? "External Link (locked for uploaded files)" : "External Link"}

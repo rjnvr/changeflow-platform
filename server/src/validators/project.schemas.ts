@@ -40,6 +40,7 @@ export const createProjectDocumentSchema = z.object({
     title: z.string().min(2).max(120),
     kind: z.string().min(2).max(40),
     summary: z.string().min(10).max(500),
+    assignedTo: z.string().min(2).max(80).optional().or(z.literal("")),
     url: z.string().url().optional().or(z.literal("")),
     storageKey: z.string().min(5).max(512).optional(),
     fileName: z.string().min(1).max(255).optional(),
@@ -72,6 +73,7 @@ export const updateProjectDocumentSchema = z.object({
     title: z.string().min(2).max(120),
     kind: z.string().min(2).max(40),
     summary: z.string().min(10).max(500),
+    assignedTo: z.string().min(2).max(80).optional().or(z.literal("")),
     url: z.string().url().optional().or(z.literal(""))
   })
 });

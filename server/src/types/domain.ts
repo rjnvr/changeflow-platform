@@ -4,6 +4,19 @@ export interface AuthenticatedUser {
   role: "admin" | "project_manager" | "accounting";
 }
 
+export interface ProjectAnalyticsQuotaRecord {
+  userLimit: number;
+  userUsed: number;
+  userRemaining: number;
+  dayStart: string;
+  dayEnd: string;
+  globalLimit: number;
+  globalUsed: number;
+  globalRemaining: number;
+  monthStart: string;
+  monthEnd: string;
+}
+
 export interface ProjectRecord {
   id: string;
   name: string;
@@ -38,6 +51,7 @@ export interface ProjectDocumentRecord {
   title: string;
   kind: string;
   summary: string;
+  assignedTo?: string;
   url?: string;
   storageKey?: string;
   fileName?: string;
@@ -45,6 +59,37 @@ export interface ProjectDocumentRecord {
   fileSize?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectAnalyticsBriefRecord {
+  summary: string;
+  currentState: string[];
+  recentProgress: string[];
+  nextSteps: string[];
+  watchouts: string[];
+  usage: ProjectAnalyticsQuotaRecord;
+  source: "claude" | "fallback";
+  generatedAt: string;
+}
+
+export interface UserBriefQuotaRecord {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: "admin" | "project_manager" | "accounting";
+  dailyProjectBriefLimit: number;
+  usedToday: number;
+  remainingToday: number;
+}
+
+export interface BriefQuotaDashboardRecord {
+  globalLimit: number;
+  globalUsed: number;
+  globalRemaining: number;
+  monthStart: string;
+  monthEnd: string;
+  users: UserBriefQuotaRecord[];
 }
 
 export interface ChangeOrderRecord {

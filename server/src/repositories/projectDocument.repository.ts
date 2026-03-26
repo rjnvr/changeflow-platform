@@ -10,6 +10,7 @@ const projectDocumentClient = (prisma as unknown as {
         title: string;
         kind: string;
         summary: string;
+        assignedTo: string | null;
         url: string | null;
         storageKey: string | null;
         fileName: string | null;
@@ -25,6 +26,7 @@ const projectDocumentClient = (prisma as unknown as {
       title: string;
       kind: string;
       summary: string;
+      assignedTo: string | null;
       url: string | null;
       storageKey: string | null;
       fileName: string | null;
@@ -39,6 +41,7 @@ const projectDocumentClient = (prisma as unknown as {
       title: string;
       kind: string;
       summary: string;
+      assignedTo: string | null;
       url: string | null;
       storageKey: string | null;
       fileName: string | null;
@@ -53,6 +56,7 @@ const projectDocumentClient = (prisma as unknown as {
       title: string;
       kind: string;
       summary: string;
+      assignedTo: string | null;
       url: string | null;
       storageKey: string | null;
       fileName: string | null;
@@ -67,6 +71,7 @@ const projectDocumentClient = (prisma as unknown as {
       title: string;
       kind: string;
       summary: string;
+      assignedTo: string | null;
       url: string | null;
       storageKey: string | null;
       fileName: string | null;
@@ -84,6 +89,7 @@ function mapProjectDocument(document: {
   title: string;
   kind: string;
   summary: string;
+  assignedTo: string | null;
   url: string | null;
   storageKey: string | null;
   fileName: string | null;
@@ -98,6 +104,7 @@ function mapProjectDocument(document: {
     title: document.title,
     kind: document.kind,
     summary: document.summary,
+    assignedTo: document.assignedTo ?? undefined,
     url: document.url ?? undefined,
     storageKey: document.storageKey ?? undefined,
     fileName: document.fileName ?? undefined,
@@ -134,6 +141,7 @@ export const projectDocumentRepository = {
         title: input.title,
         kind: input.kind,
         summary: input.summary,
+        assignedTo: input.assignedTo,
         url: input.url,
         storageKey: input.storageKey,
         fileName: input.fileName,
@@ -151,6 +159,7 @@ export const projectDocumentRepository = {
       title: string;
       kind: string;
       summary: string;
+      assignedTo?: string;
       url?: string;
     }
   ) {
@@ -171,6 +180,7 @@ export const projectDocumentRepository = {
         title: input.title,
         kind: input.kind,
         summary: input.summary,
+        assignedTo: input.assignedTo ?? null,
         url: existingDocument.storageKey ? existingDocument.url : input.url ?? null
       }
     });

@@ -32,6 +32,7 @@ export interface ProjectDocument {
   title: string;
   kind: string;
   summary: string;
+  assignedTo?: string;
   url?: string;
   storageKey?: string;
   fileName?: string;
@@ -48,4 +49,28 @@ export interface ProjectDocumentUploadIntent {
   contentType: string;
   fileSize: number;
   expiresIn: number;
+}
+
+export interface ProjectAnalyticsUsage {
+  userLimit: number;
+  userUsed: number;
+  userRemaining: number;
+  dayStart: string;
+  dayEnd: string;
+  globalLimit: number;
+  globalUsed: number;
+  globalRemaining: number;
+  monthStart: string;
+  monthEnd: string;
+}
+
+export interface ProjectAnalyticsBrief {
+  summary: string;
+  currentState: string[];
+  recentProgress: string[];
+  nextSteps: string[];
+  watchouts: string[];
+  usage: ProjectAnalyticsUsage;
+  source: "claude" | "fallback";
+  generatedAt: string;
 }

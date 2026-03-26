@@ -1,4 +1,5 @@
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import HistoryRoundedIcon from "@mui/icons-material/HistoryRounded";
 import HubRoundedIcon from "@mui/icons-material/HubRounded";
 import PriorityHighRoundedIcon from "@mui/icons-material/PriorityHighRounded";
@@ -10,11 +11,14 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useAuthContext } from "../context/AuthContext";
 import { useChangeOrders } from "../hooks/useChangeOrders";
 import { useProjects } from "../hooks/useProjects";
 import type { ChangeOrder } from "../types/changeOrder";
+import { DASHBOARD_DEMO_GUIDE_KEY } from "../utils/constants";
 import { formatCurrency } from "../utils/formatCurrency";
 
 interface PriorityRow {
@@ -139,8 +143,17 @@ function StatusChip({ tone }: { tone: PriorityRow["statusTone"] }) {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const { projects, error: projectsError } = useProjects();
   const { changeOrders, error: changeOrdersError } = useChangeOrders();
+  const [demoGuideVisible, setDemoGuideVisible] = useState(false);
+
+  useEffect(() => {
+    const storageKey = `${DASHBOARD_DEMO_GUIDE_KEY}.${user?.id ?? "guest"}`;
+    const dismissed = localStorage.getItem(storageKey);
+
+    setDemoGuideVisible(!dismissed);
+  }, [user?.id]);
 
   const activeProjectName = projects[0]?.name ?? "Project Alpha";
   const reviewCount = changeOrders.filter((item) => item.status === "pending_review" || item.status === "rejected").length;
@@ -160,10 +173,133 @@ export function DashboardPage() {
 
   const priorityRows = [...liveRows, ...supplementalRows].slice(0, 4);
 
+  function dismissDemoGuide() {
+    const storageKey = `${DASHBOARD_DEMO_GUIDE_KEY}.${user?.id ?? "guest"}`;
+    localStorage.setItem(storageKey, new Date().toISOString());
+    setDemoGuideVisible(false);
+  }
+
   return (
     <Stack spacing={4.5}>
       {projectsError || changeOrdersError ? (
         <Alert severity="warning">{projectsError ?? changeOrdersError}</Alert>
+      ) : null}
+
+      {demoGuideVisible ? (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3.2,
+            borderRadius: 4,
+            background: "linear-gradient(135deg, rgba(230,246,255,0.98) 0%, rgba(255,255,255,1) 100%)",
+            boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+          }}
+        >
+          <Stack
+            direction={{ xs: "column", lg: "row" }}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", lg: "center" }}
+            spacing={2.5}
+          >
+            <Box sx={{ maxWidth: 860 }}>
+              <Typography
+                sx={{
+                  fontSize: "0.76rem",
+                  fontWeight: 900,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  color: "#046B5E"
+                }}
+              >
+                Demo Guide
+              </Typography>
+              <Typography
+                sx={{
+                  mt: 0.9,
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: { xs: "1.7rem", md: "2rem" },
+                  fontWeight: 800,
+                  letterSpacing: -1,
+                  color: "#00342B"
+                }}
+              >
+                Start here for the fastest walkthrough
+              </Typography>
+              <Typography sx={{ mt: 1, fontSize: "1rem", lineHeight: 1.7, color: "#5A6A84" }}>
+                Open a project, generate a Claude brief, review change orders, then jump to Team to manage daily AI limits.
+              </Typography>
+            </Box>
+
+            <ButtonBase
+              onClick={dismissDemoGuide}
+              sx={{
+                alignSelf: { xs: "flex-end", lg: "flex-start" },
+                px: 1.4,
+                py: 0.8,
+                borderRadius: 2.2,
+                color: "#5A6A84"
+              }}
+            >
+              <Stack direction="row" spacing={0.8} alignItems="center">
+                <CloseRoundedIcon sx={{ fontSize: 16 }} />
+                <Typography sx={{ fontSize: "0.84rem", fontWeight: 800 }}>Dismiss</Typography>
+              </Stack>
+            </ButtonBase>
+          </Stack>
+
+          <Box
+            sx={{
+              mt: 2.6,
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(4, minmax(0, 1fr))" },
+              gap: 1.5
+            }}
+          >
+            {[
+              {
+                title: "Open portfolio",
+                description: "Review project health and open a project workspace.",
+                onClick: () => navigate("/app/projects")
+              },
+              {
+                title: "Generate a brief",
+                description: "Open the lead project and create an AI project briefing.",
+                onClick: () => navigate(projects[0] ? `/app/projects/${projects[0].id}` : "/app/projects")
+              },
+              {
+                title: "Review pipeline",
+                description: "Work through pending change orders and approvals.",
+                onClick: () => navigate("/app/change-orders")
+              },
+              {
+                title: "Manage AI quotas",
+                description: "Set daily Claude brief limits for the project team.",
+                onClick: () => navigate("/app/team")
+              }
+            ].map((item) => (
+              <ButtonBase
+                key={item.title}
+                onClick={item.onClick}
+                sx={{
+                  p: 2.2,
+                  borderRadius: 3,
+                  textAlign: "left",
+                  justifyContent: "flex-start",
+                  alignItems: "stretch",
+                  backgroundColor: "#FFFFFF",
+                  border: "1px solid rgba(213,236,248,0.9)"
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{item.title}</Typography>
+                  <Typography sx={{ mt: 0.8, fontSize: "0.9rem", lineHeight: 1.6, color: "#5A6A84" }}>
+                    {item.description}
+                  </Typography>
+                </Box>
+              </ButtonBase>
+            ))}
+          </Box>
+        </Paper>
       ) : null}
 
       <Box

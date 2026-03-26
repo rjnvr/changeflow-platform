@@ -43,3 +43,15 @@ export const changePasswordSchema = z.object({
     newPassword: z.string().min(8)
   })
 });
+
+export const updateBriefQuotaSchema = z.object({
+  body: z.object({
+    dailyProjectBriefLimit: z.number().int().min(1).max(150)
+  })
+});
+
+export const applyBriefQuotaToAllSchema = z.object({
+  body: z.object({
+    dailyProjectBriefLimit: z.number().int().min(1).max(150)
+  })
+});

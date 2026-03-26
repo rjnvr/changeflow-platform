@@ -1,4 +1,5 @@
 import type {
+  BriefQuotaDashboard,
   ChangePasswordResponse,
   AuthUser,
   LoginResponse,
@@ -67,5 +68,23 @@ export function changePassword(input: {
   return apiRequest<ChangePasswordResponse>("/auth/change-password", {
     method: "POST",
     body: JSON.stringify(input)
+  });
+}
+
+export function getBriefQuotaDashboard() {
+  return apiRequest<BriefQuotaDashboard>("/auth/brief-quotas");
+}
+
+export function updateUserBriefQuota(userId: string, dailyProjectBriefLimit: number) {
+  return apiRequest<{ id: string; dailyProjectBriefLimit: number }>(`/auth/users/${userId}/brief-quota`, {
+    method: "PATCH",
+    body: JSON.stringify({ dailyProjectBriefLimit })
+  });
+}
+
+export function applyBriefQuotaToAll(dailyProjectBriefLimit: number) {
+  return apiRequest<{ updatedCount: number; dailyProjectBriefLimit: number }>("/auth/brief-quotas/apply-to-all", {
+    method: "PATCH",
+    body: JSON.stringify({ dailyProjectBriefLimit })
   });
 }

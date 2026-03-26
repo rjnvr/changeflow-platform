@@ -27,8 +27,10 @@ import {
   updateChangeOrderStatus
 } from "../api/changeOrders";
 import { EditChangeOrderModal } from "../components/change-orders/EditChangeOrderModal";
+import { WorkspaceBreadcrumbs } from "../components/layout/WorkspaceBreadcrumbs";
 import { WorkspaceFooter } from "../components/layout/WorkspaceFooter";
 import { useAuthContext } from "../context/AuthContext";
+import { useFeedbackContext } from "../context/FeedbackContext";
 import { useProjects } from "../hooks/useProjects";
 import type { ChangeOrder, ChangeOrderActivityItem, ChangeOrderComment } from "../types/changeOrder";
 import { formatCurrency } from "../utils/formatCurrency";
@@ -109,6 +111,7 @@ export function ChangeOrderDetailsPage() {
   const navigate = useNavigate();
   const { changeOrderId = "" } = useParams();
   const { user } = useAuthContext();
+  const { showToast } = useFeedbackContext();
   const { projects } = useProjects({ includeArchived: true });
   const uploadInputId = useId();
   const [changeOrder, setChangeOrder] = useState<ChangeOrder | null>(null);
@@ -123,7 +126,6 @@ export function ChangeOrderDetailsPage() {
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<ChangeOrder["status"] | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
 
   const project = useMemo(
@@ -172,7 +174,6 @@ export function ChangeOrderDetailsPage() {
     }
 
     setUploadingAttachments(true);
-    setMessage("");
     setError("");
 
     try {
@@ -219,7 +220,10 @@ export function ChangeOrderDetailsPage() {
       setChangeOrder(updatedChangeOrder);
       setPendingFiles([]);
       setActivity(await getChangeOrderActivity(changeOrder.id));
-      setMessage(`${uploadedAttachments.length} attachment${uploadedAttachments.length === 1 ? "" : "s"} added.`);
+      showToast({
+        message: `${uploadedAttachments.length} attachment${uploadedAttachments.length === 1 ? "" : "s"} added.`,
+        severity: "success"
+      });
     } catch (requestError) {
       if (requestError instanceof TypeError) {
         setError("The browser could not upload the attachments. Check your S3 bucket CORS settings for http://localhost:5173.");
@@ -259,7 +263,6 @@ export function ChangeOrderDetailsPage() {
     }
 
     setDeletingAttachmentId(attachmentId);
-    setMessage("");
     setError("");
 
     try {
@@ -273,7 +276,10 @@ export function ChangeOrderDetailsPage() {
           : current
       );
       setActivity(await getChangeOrderActivity(changeOrder.id));
-      setMessage("Attachment removed.");
+      showToast({
+        message: "Attachment removed.",
+        severity: "success"
+      });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to remove attachment.");
     } finally {
@@ -287,7 +293,6 @@ export function ChangeOrderDetailsPage() {
     }
 
     setUpdatingStatus(status);
-    setMessage("");
     setError("");
 
     try {
@@ -295,7 +300,10 @@ export function ChangeOrderDetailsPage() {
       setChangeOrder(updatedChangeOrder);
       const nextActivity = await getChangeOrderActivity(changeOrder.id);
       setActivity(nextActivity);
-      setMessage(`Change order moved to ${statusCopy(status).label.toLowerCase()}.`);
+      showToast({
+        message: `Change order moved to ${statusCopy(status).label.toLowerCase()}.`,
+        severity: "success"
+      });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to update status.");
     } finally {
@@ -314,7 +322,6 @@ export function ChangeOrderDetailsPage() {
     }
 
     setSubmittingComment(true);
-    setMessage("");
     setError("");
 
     try {
@@ -329,7 +336,10 @@ export function ChangeOrderDetailsPage() {
       ]);
       setComments(nextComments);
       setActivity(nextActivity);
-      setMessage("Comment added to the review thread.");
+      showToast({
+        message: "Comment added to the review thread.",
+        severity: "success"
+      });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to add comment.");
     } finally {
@@ -356,11 +366,17 @@ export function ChangeOrderDetailsPage() {
 
   return (
     <Stack spacing={4}>
-      {message ? <Alert severity="success">{message}</Alert> : null}
       {error ? <Alert severity="warning">{error}</Alert> : null}
       {changeOrder.archivedAt || project?.archivedAt ? (
         <Alert severity="warning">This change order is archived and read-only.</Alert>
       ) : null}
+
+      <WorkspaceBreadcrumbs
+        items={[
+          { label: "Change Orders", to: "/app/change-orders" },
+          { label: changeOrder.title }
+        ]}
+      />
 
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 3, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box sx={{ maxWidth: 820 }}>
@@ -421,11 +437,14 @@ export function ChangeOrderDetailsPage() {
                   return;
                 }
 
-                setMessage("");
                 setError("");
 
                 try {
                   await archiveChangeOrder(changeOrder.id);
+                  showToast({
+                    message: `${changeOrder.title} archived. You can review it from Resources > Archive.`,
+                    severity: "success"
+                  });
                   navigate("/app/resources?panel=archive");
                 } catch (requestError) {
                   setError(requestError instanceof Error ? requestError.message : "Unable to archive change order.");
@@ -447,6 +466,42 @@ export function ChangeOrderDetailsPage() {
           </ButtonBase>
         </Stack>
       </Box>
+
+      <Paper elevation={0} sx={{ p: 2.8, borderRadius: 4, backgroundColor: "#FFFFFF" }}>
+        <Stack
+          direction={{ xs: "column", lg: "row" }}
+          spacing={1.6}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", lg: "center" }}
+        >
+          <Box>
+            <Typography sx={{ fontSize: "0.9rem", fontWeight: 900, letterSpacing: 1.6, textTransform: "uppercase", color: "#93A6C3" }}>
+              Workflow Access
+            </Typography>
+            <Typography sx={{ mt: 0.6, fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+              {changeOrder.archivedAt || project?.archivedAt
+                ? "Archived review workspace"
+                : canManageChangeOrder
+                  ? user?.id === project?.ownerId
+                    ? "Owner review controls"
+                    : "Admin override controls"
+                  : "Read-only review access"}
+            </Typography>
+            <Typography sx={{ mt: 0.55, fontSize: "0.92rem", lineHeight: 1.65, color: "#5A6A84" }}>
+              {changeOrder.archivedAt || project?.archivedAt
+                ? "Comments, status changes, and attachments are locked after archiving."
+                : canManageChangeOrder
+                  ? user?.id === project?.ownerId
+                    ? "You can edit this record, manage attachments, update approval status, and archive the change order."
+                    : "As an admin, you can manage approval flow and attachments even when you are not the project owner."
+                  : "You can review the record, attachments, comments, and activity, but approval actions are limited to the owner or an admin."}
+            </Typography>
+          </Box>
+          <Typography sx={{ fontSize: "0.88rem", color: "#7A869F" }}>
+            {project ? `Project: ${project.name}` : "Linked project unavailable"}
+          </Typography>
+        </Stack>
+      </Paper>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "2fr 1fr" }, gap: 2.5 }}>
         <Stack spacing={2.5}>
@@ -735,13 +790,16 @@ export function ChangeOrderDetailsPage() {
           changeOrder={changeOrder}
           projects={projects.filter((entry) => !entry.archivedAt && (user?.role === "admin" || entry.ownerId === user?.id))}
           onClose={() => setEditModalOpen(false)}
-          onSaved={async (updatedChangeOrder) => {
-            setChangeOrder(updatedChangeOrder);
-            setEditModalOpen(false);
-            setMessage("Change order updated.");
-            const nextActivity = await getChangeOrderActivity(updatedChangeOrder.id);
-            setActivity(nextActivity);
-          }}
+        onSaved={async (updatedChangeOrder) => {
+          setChangeOrder(updatedChangeOrder);
+          setEditModalOpen(false);
+          showToast({
+            message: "Change order updated.",
+            severity: "success"
+          });
+          const nextActivity = await getChangeOrderActivity(updatedChangeOrder.id);
+          setActivity(nextActivity);
+        }}
         />
       ) : null}
     </Stack>

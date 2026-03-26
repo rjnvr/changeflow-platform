@@ -39,6 +39,12 @@ const changeOrderClient = (prisma as PrismaClient & {
     createMany(args: unknown): Promise<unknown>;
   };
 }).changeOrder;
+const projectBriefGenerationClient = (prisma as PrismaClient & {
+  projectBriefGeneration: {
+    deleteMany(): Promise<unknown>;
+    createMany(args: unknown): Promise<unknown>;
+  };
+}).projectBriefGeneration;
 
 const now = new Date("2026-03-23T12:00:00.000Z");
 
@@ -46,6 +52,7 @@ const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1
 const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
 async function main() {
+  await projectBriefGenerationClient.deleteMany();
   await prisma.auditLog.deleteMany();
   await changeOrderAttachmentClient.deleteMany();
   await prisma.changeOrder.deleteMany();
@@ -63,7 +70,8 @@ async function main() {
         firstName: "Demo",
         lastName: "User",
         passwordHash: hashPassword("password123"),
-        role: UserRole.admin
+        role: UserRole.admin,
+        dailyProjectBriefLimit: 3
       },
       {
         id: "usr_pm_1",
@@ -71,7 +79,8 @@ async function main() {
         firstName: "Sarah",
         lastName: "Mitchell",
         passwordHash: hashPassword("password123"),
-        role: UserRole.project_manager
+        role: UserRole.project_manager,
+        dailyProjectBriefLimit: 3
       },
       {
         id: "usr_acc_1",
@@ -79,7 +88,8 @@ async function main() {
         firstName: "Marcus",
         lastName: "Chen",
         passwordHash: hashPassword("password123"),
-        role: UserRole.accounting
+        role: UserRole.accounting,
+        dailyProjectBriefLimit: 3
       }
     ]
   });
@@ -347,6 +357,47 @@ async function main() {
         url: "https://example.com/docs/bridge-pier-photoset.zip",
         createdAt: daysAgo(5),
         updatedAt: daysAgo(2)
+      }
+    ]
+  });
+
+  await projectBriefGenerationClient.createMany({
+    data: [
+      {
+        id: "pbg_001",
+        userId: "usr_demo_1",
+        projectId: "prj_h26_001",
+        createdAt: daysAgo(2)
+      },
+      {
+        id: "pbg_002",
+        userId: "usr_demo_1",
+        projectId: "prj_sky_001",
+        createdAt: daysAgo(1)
+      },
+      {
+        id: "pbg_003",
+        userId: "usr_pm_1",
+        projectId: "prj_sky_001",
+        createdAt: hoursAgo(30)
+      },
+      {
+        id: "pbg_004",
+        userId: "usr_pm_1",
+        projectId: "prj_hub_002",
+        createdAt: hoursAgo(26)
+      },
+      {
+        id: "pbg_005",
+        userId: "usr_pm_1",
+        projectId: "prj_oak_004",
+        createdAt: hoursAgo(12)
+      },
+      {
+        id: "pbg_006",
+        userId: "usr_acc_1",
+        projectId: "prj_grn_008",
+        createdAt: hoursAgo(20)
       }
     ]
   });

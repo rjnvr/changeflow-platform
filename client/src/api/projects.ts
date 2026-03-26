@@ -1,4 +1,5 @@
 import type {
+  ProjectAnalyticsBrief,
   Project,
   ProjectDocument,
   ProjectDocumentUploadIntent,
@@ -47,6 +48,12 @@ export function getProject(projectId: string) {
   return apiRequest<Project>(`/projects/${projectId}`);
 }
 
+export function generateProjectBrief(projectId: string) {
+  return apiRequest<ProjectAnalyticsBrief>(`/projects/${projectId}/brief`, {
+    method: "POST"
+  });
+}
+
 export function getProjectTeamMembers(projectId: string) {
   return apiRequest<ProjectTeamMember[]>(`/projects/${projectId}/team`);
 }
@@ -83,6 +90,7 @@ export function createProjectDocument(
     title: string;
     kind: string;
     summary: string;
+    assignedTo?: string;
     url?: string;
     storageKey?: string;
     fileName?: string;
@@ -103,6 +111,7 @@ export function updateProjectDocument(
     title: string;
     kind: string;
     summary: string;
+    assignedTo?: string;
     url?: string;
   }
 ) {

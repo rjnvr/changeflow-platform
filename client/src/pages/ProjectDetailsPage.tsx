@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import CalendarTodayRoundedIcon from "@mui/icons-material/CalendarTodayRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DescriptionRoundedIcon from "@mui/icons-material/DescriptionRounded";
@@ -18,18 +19,21 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { archiveProject, deleteProjectTeamMember, getProject } from "../api/projects";
+import { archiveProject, deleteProjectTeamMember, generateProjectBrief, getProject } from "../api/projects";
+import { WorkspaceBreadcrumbs } from "../components/layout/WorkspaceBreadcrumbs";
 import { AddTeamMemberModal } from "../components/projects/AddTeamMemberModal";
 import { EditProjectModal } from "../components/projects/EditProjectModal";
 import { ProjectDocumentVaultModal } from "../components/projects/ProjectDocumentVaultModal";
 import { useAuthContext } from "../context/AuthContext";
+import { useFeedbackContext } from "../context/FeedbackContext";
 import { useChangeOrders } from "../hooks/useChangeOrders";
 import { useProjectDocuments } from "../hooks/useProjectDocuments";
 import { useProjectTeamMembers } from "../hooks/useProjectTeamMembers";
-import type { Project, ProjectTeamMember } from "../types/project";
+import type { Project, ProjectAnalyticsBrief, ProjectTeamMember } from "../types/project";
 import type { ChangeOrder } from "../types/changeOrder";
+import { PROJECT_ANALYTICS_BRIEF_KEY } from "../utils/constants";
 import { formatCurrency } from "../utils/formatCurrency";
-import { formatDate } from "../utils/formatDate";
+import { formatDate, formatDateTime } from "../utils/formatDate";
 
 interface RelatedChangeRow {
   id: string;
@@ -158,26 +162,82 @@ const fallbackTeamMembers: ProjectTeamMember[] = [
   }
 ];
 
+function projectBriefStorageKey(projectId: string, userId?: string) {
+  return `${PROJECT_ANALYTICS_BRIEF_KEY}.${userId ?? "guest"}.${projectId}`;
+}
+
+function readStoredProjectBrief(projectId: string, userId?: string) {
+  try {
+    const rawValue = localStorage.getItem(projectBriefStorageKey(projectId, userId));
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedBrief = JSON.parse(rawValue) as Partial<ProjectAnalyticsBrief>;
+
+    if (
+      !parsedBrief ||
+      typeof parsedBrief.summary !== "string" ||
+      !parsedBrief.usage ||
+      typeof parsedBrief.usage.userLimit !== "number" ||
+      typeof parsedBrief.usage.globalLimit !== "number" ||
+      typeof parsedBrief.usage.dayEnd !== "string"
+    ) {
+      return null;
+    }
+
+    if (parsedBrief.usage.dayEnd && new Date(parsedBrief.usage.dayEnd).getTime() <= Date.now()) {
+      return null;
+    }
+
+    return parsedBrief as ProjectAnalyticsBrief;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProjectBrief(projectId: string, userId: string | undefined, brief: ProjectAnalyticsBrief) {
+  try {
+    localStorage.setItem(projectBriefStorageKey(projectId, userId), JSON.stringify(brief));
+  } catch {
+    // Ignore storage failures and keep the live brief in memory.
+  }
+}
+
 export function ProjectDetailsPage() {
   const navigate = useNavigate();
   const { projectId = "" } = useParams();
   const { user } = useAuthContext();
+  const { showToast } = useFeedbackContext();
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [documentVaultOpen, setDocumentVaultOpen] = useState(false);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [projectBrief, setProjectBrief] = useState<ProjectAnalyticsBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
   const [selectedTeamMember, setSelectedTeamMember] = useState<ProjectTeamMember | null>(null);
   const { changeOrders } = useChangeOrders(projectId, { includeArchived: true });
   const { teamMembers, error: teamError, refresh: refreshTeamMembers } = useProjectTeamMembers(projectId);
   const { documents, error: documentError, refresh: refreshDocuments } = useProjectDocuments(projectId);
 
   useEffect(() => {
+    setProjectBrief(null);
+    setBriefError(null);
     getProject(projectId)
       .then(setProject)
       .catch((requestError: Error) => setError(requestError.message));
   }, [projectId]);
+
+  useEffect(() => {
+    const storedBrief = readStoredProjectBrief(projectId, user?.id);
+
+    if (storedBrief) {
+      setProjectBrief(storedBrief);
+    }
+  }, [projectId, user?.id]);
 
   if (error) {
     return <Alert severity="error">{error}</Alert>;
@@ -197,7 +257,9 @@ export function ProjectDetailsPage() {
     documents.length > 0
       ? documents.slice(0, 2).map((document) => ({
           title: document.title,
-          subtitle: `Updated ${formatDate(document.updatedAt)}`,
+          subtitle: document.assignedTo
+            ? `Assigned to ${document.assignedTo} • Updated ${formatDate(document.updatedAt)}`
+            : `Updated ${formatDate(document.updatedAt)}`,
           icon:
             document.kind.toLowerCase().includes("drawing") ? (
               <DrawRoundedIcon sx={{ color: "#7A1E08" }} />
@@ -215,6 +277,28 @@ export function ProjectDetailsPage() {
   const impactValue = changeOrders.reduce((total, item) => total + item.amount, 0);
   const utilization = Math.min(64 + changeOrders.length * 4, 92);
 
+  async function handleGenerateBrief() {
+    setBriefLoading(true);
+    setBriefError(null);
+
+    try {
+      const brief = await generateProjectBrief(projectId);
+      setProjectBrief(brief);
+      writeStoredProjectBrief(projectId, user?.id, brief);
+      showToast({
+        message:
+          brief.source === "claude"
+            ? "Claude generated a fresh project analytics brief."
+            : "Project analytics brief generated using the local fallback summary.",
+        severity: brief.source === "claude" ? "success" : "info"
+      });
+    } catch (requestError) {
+      setBriefError(requestError instanceof Error ? requestError.message : "Unable to generate the project brief.");
+    } finally {
+      setBriefLoading(false);
+    }
+  }
+
   return (
     <Stack
       spacing={4.5}
@@ -224,10 +308,16 @@ export function ProjectDetailsPage() {
         backgroundSize: "24px 24px"
       }}
     >
-      {message ? <Alert severity="info">{message}</Alert> : null}
       {project.archivedAt ? <Alert severity="warning">This project is archived and read-only.</Alert> : null}
       {teamError ? <Alert severity="warning">{teamError}</Alert> : null}
       {documentError ? <Alert severity="warning">{documentError}</Alert> : null}
+
+      <WorkspaceBreadcrumbs
+        items={[
+          { label: "Projects", to: "/app/projects" },
+          { label: project.name }
+        ]}
+      />
 
       <Box
         sx={{
@@ -317,9 +407,12 @@ export function ProjectDetailsPage() {
 
                   try {
                     await archiveProject(project.id);
+                    showToast({
+                      message: `${project.name} archived. You can review it from Resources > Archive.`,
+                      severity: "success"
+                    });
                     navigate("/app/resources?panel=archive");
                   } catch (requestError) {
-                    setMessage("");
                     setError(requestError instanceof Error ? requestError.message : "Unable to archive project.");
                   }
                 }}
@@ -401,6 +494,66 @@ export function ProjectDetailsPage() {
         </Stack>
       </Box>
 
+      <Paper
+        elevation={0}
+        sx={{
+          px: 2.8,
+          py: 2.2,
+          borderRadius: 4,
+          backgroundColor: "#FFFFFF",
+          boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+        }}
+      >
+        <Stack
+          direction={{ xs: "column", lg: "row" }}
+          spacing={1.6}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", lg: "center" }}
+        >
+          <Stack direction="row" spacing={1.2} alignItems="flex-start">
+            <Box
+              sx={{
+                width: 38,
+                height: 38,
+                borderRadius: 2.5,
+                display: "grid",
+                placeItems: "center",
+                backgroundColor: canManageProject ? "#E6F6FF" : "#FFF5EE",
+                color: canManageProject ? "#046B5E" : "#7A1E08"
+              }}
+            >
+              {canManageProject ? <EditRoundedIcon sx={{ fontSize: 18 }} /> : <ShieldRoundedIcon sx={{ fontSize: 18 }} />}
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: "0.92rem", fontWeight: 900, letterSpacing: 1.5, textTransform: "uppercase", color: "#93A6C3" }}>
+                Access Level
+              </Typography>
+              <Typography sx={{ mt: 0.5, fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                {project.archivedAt
+                  ? "Archived workspace"
+                  : canManageProject
+                    ? user?.id === project.ownerId
+                      ? "Owner access"
+                      : "Admin override access"
+                    : "Read-only access"}
+              </Typography>
+              <Typography sx={{ mt: 0.55, fontSize: "0.92rem", lineHeight: 1.65, color: "#5A6A84" }}>
+                {project.archivedAt
+                  ? "Records stay visible for reporting, but edits, team changes, and document updates are locked."
+                  : canManageProject
+                    ? user?.id === project.ownerId
+                      ? "You can edit project details, manage the on-site team, update the document vault, and archive the project."
+                      : "As an admin, you can manage this project even though another workspace owner is assigned to it."
+                    : "You can review the project, related change orders, documents, and activity, but only the owner or an admin can make changes."}
+              </Typography>
+            </Box>
+          </Stack>
+          <Typography sx={{ fontSize: "0.88rem", color: "#7A869F" }}>
+            {user?.id === project.ownerId ? "Assigned owner: you" : `Owner record: ${project.ownerId}`}
+          </Typography>
+        </Stack>
+      </Paper>
+
       <Box
         sx={{
           display: "grid",
@@ -458,6 +611,307 @@ export function ProjectDetailsPage() {
                 />
               </Box>
             </Box>
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 5,
+              background: "linear-gradient(180deg, rgba(230,246,255,0.85) 0%, #FFFFFF 100%)",
+              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              spacing={2}
+              sx={{ mb: 3 }}
+            >
+              <Box>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                  <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                  <Typography
+                    sx={{
+                      fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                      fontSize: "2rem",
+                      fontWeight: 800,
+                      letterSpacing: -1.1,
+                      color: "#00342B"
+                    }}
+                  >
+                    Project Analytics Brief
+                  </Typography>
+                </Stack>
+                <Typography sx={{ mt: 1, fontSize: "1rem", color: "#5A6A84" }}>
+                  Generate a quick operational readout of what is happening now, what has progressed, and what needs attention.
+                </Typography>
+              </Box>
+              <ButtonBase
+                onClick={handleGenerateBrief}
+                disabled={briefLoading}
+                sx={{
+                  minWidth: 118,
+                  px: 1.8,
+                  py: 1.15,
+                  borderRadius: 2.5,
+                  backgroundColor: "#00342B",
+                  color: "#FFFFFF",
+                  opacity: briefLoading ? 0.72 : 1
+                }}
+              >
+                <Stack direction="row" spacing={0.9} alignItems="center">
+                  <AutoAwesomeRoundedIcon sx={{ fontSize: 17 }} />
+                  <Typography
+                    sx={{
+                      fontSize: "0.78rem",
+                      fontWeight: 800,
+                      lineHeight: 1.02,
+                      textAlign: "left"
+                    }}
+                  >
+                    <Box component="span" sx={{ display: "block" }}>
+                      {briefLoading ? "Generating" : projectBrief ? "Refresh" : "Generate"}
+                    </Box>
+                    <Box component="span" sx={{ display: "block" }}>
+                      Brief
+                    </Box>
+                  </Typography>
+                </Stack>
+              </ButtonBase>
+            </Stack>
+
+            {briefError ? (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                {briefError}
+              </Alert>
+            ) : null}
+
+            {projectBrief ? (
+              <Stack spacing={3}>
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
+                  <Box
+                    sx={{
+                      px: 1.4,
+                      py: 0.7,
+                      borderRadius: 999,
+                      backgroundColor: projectBrief.source === "claude" ? "#9DEFDE" : "#CFE6F2",
+                      color: projectBrief.source === "claude" ? "#0F6F62" : "#3F4945"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.3, textTransform: "uppercase" }}>
+                      {projectBrief.source === "claude" ? "Claude Insight" : "Local Insight"}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                    Generated {formatDateTime(projectBrief.generatedAt)}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                    Your daily quota: {projectBrief.usage.userUsed}/{projectBrief.usage.userLimit}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                    Workspace pool: {projectBrief.usage.globalUsed}/{projectBrief.usage.globalLimit}
+                  </Typography>
+                </Stack>
+
+                <Typography sx={{ fontSize: "1.08rem", lineHeight: 1.7, color: "#42536D" }}>
+                  {projectBrief.summary}
+                </Typography>
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    gap: 2.2
+                  }}
+                >
+                  {[
+                    { title: "Current State", items: projectBrief.currentState, tone: "#E6F6FF" },
+                    { title: "Recent Progress", items: projectBrief.recentProgress, tone: "#FFFFFF" },
+                    { title: "Next Steps", items: projectBrief.nextSteps, tone: "#FFFFFF" },
+                    { title: "Watchouts", items: projectBrief.watchouts, tone: "#FFFAF8" }
+                  ].map((section) => (
+                    <Paper
+                      key={section.title}
+                      elevation={0}
+                      sx={{
+                        p: 2.4,
+                        borderRadius: 3.5,
+                        backgroundColor: section.tone,
+                        border: "1px solid rgba(213,236,248,0.8)"
+                      }}
+                    >
+                      <Typography
+                        sx={{
+                          mb: 1.6,
+                          fontSize: "0.78rem",
+                          fontWeight: 900,
+                          letterSpacing: 1.7,
+                          textTransform: "uppercase",
+                          color: "#93A6C3"
+                        }}
+                      >
+                        {section.title}
+                      </Typography>
+                      <Stack spacing={1.1}>
+                        {section.items.map((item) => (
+                          <Stack key={item} direction="row" spacing={1.1} alignItems="flex-start">
+                            <Box
+                              sx={{
+                                width: 7,
+                                height: 7,
+                                mt: 0.9,
+                                borderRadius: "50%",
+                                backgroundColor: "#046B5E",
+                                flexShrink: 0
+                              }}
+                            />
+                            <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.6, color: "#42536D" }}>
+                              {item}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Box>
+              </Stack>
+            ) : (
+              <Stack
+                spacing={2}
+                sx={{
+                  px: { xs: 0, md: 1 },
+                  py: { xs: 1, md: 2 }
+                }}
+              >
+                <Typography sx={{ fontSize: "1rem", lineHeight: 1.7, color: "#5A6A84", maxWidth: 760 }}>
+                  This uses the live project record, related change orders, on-site team, and document vault to generate a quick briefing a PM can act on immediately.
+                </Typography>
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
+                  {["Current state", "Recent progress", "Next steps", "Watchouts"].map((item) => (
+                    <Box
+                      key={item}
+                      sx={{
+                        px: 1.4,
+                        py: 0.8,
+                        borderRadius: 999,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.95)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, color: "#42536D" }}>{item}</Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Stack>
+            )}
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 5,
+              overflow: "hidden",
+              backgroundColor: "#FFFFFF",
+              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+            }}
+          >
+            <Box sx={{ px: 4, py: 3.2 }}>
+              <Typography
+                sx={{
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "2rem",
+                  fontWeight: 800,
+                  letterSpacing: -1.1,
+                  color: "#00342B"
+                }}
+              >
+                Related Change Orders
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr",
+                px: 4,
+                py: 2.4,
+                backgroundColor: "#D5ECF8"
+              }}
+            >
+              {["ID", "Title", "Impact", "Status"].map((item) => (
+                <Typography
+                  key={item}
+                  sx={{
+                    fontSize: "0.72rem",
+                    fontWeight: 900,
+                    letterSpacing: 2,
+                    textTransform: "uppercase",
+                    color: "#93A6C3"
+                  }}
+                >
+                  {item}
+                </Typography>
+              ))}
+            </Box>
+
+            {relatedChangeRows.map((row, index) => (
+              <Box
+                key={row.id}
+                onClick={() => navigate(`/app/change-orders?projectId=${projectId}`)}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr",
+                  alignItems: "center",
+                  px: 4,
+                  py: 3.1,
+                  cursor: "pointer",
+                  backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF",
+                  transition: "background-color 160ms ease",
+                  "&:hover": {
+                    backgroundColor: "#F3FAFF"
+                  }
+                }}
+              >
+                <Typography sx={{ fontSize: "0.94rem", fontWeight: 800, color: "#00342B" }}>{row.id}</Typography>
+                <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "#071E27" }}>{row.title}</Typography>
+                <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                  {row.impact >= 0 ? "+" : "-"}
+                  {formatCurrency(Math.abs(row.impact))}
+                </Typography>
+                <Box sx={{ justifySelf: "start" }}>
+                  <Box
+                    sx={{
+                      display: "inline-flex",
+                      px: 1.4,
+                      py: 0.8,
+                      borderRadius: 999,
+                      backgroundColor: row.status === "approved" ? "#9DEFDE" : "#FFDBD1",
+                      color: row.status === "approved" ? "#0F6F62" : "#872000"
+                    }}
+                  >
+                    <Typography
+                      sx={{
+                        fontSize: "0.72rem",
+                        fontWeight: 900,
+                        letterSpacing: 1.2,
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      {row.status}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+
+            <ButtonBase
+              onClick={() => navigate(`/app/change-orders?projectId=${projectId}`)}
+              sx={{ width: "100%", py: 2.6, backgroundColor: "#D5ECF8", color: "#046B5E" }}
+            >
+              <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View Full Change History</Typography>
+            </ButtonBase>
           </Paper>
 
           <Paper
@@ -611,7 +1065,10 @@ export function ProjectDetailsPage() {
                             try {
                               await deleteProjectTeamMember(project.id, member.id);
                               await refreshTeamMembers();
-                              setMessage("Team member removed from the roster.");
+                              showToast({
+                                message: "Team member removed from the roster.",
+                                severity: "success"
+                              });
                             } catch (requestError) {
                               setError(requestError instanceof Error ? requestError.message : "Unable to remove team member.");
                             }
@@ -733,112 +1190,6 @@ export function ProjectDetailsPage() {
           <Paper
             elevation={0}
             sx={{
-              borderRadius: 5,
-              overflow: "hidden",
-              backgroundColor: "#FFFFFF",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-            }}
-          >
-            <Box sx={{ px: 4, py: 3.2 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                  fontSize: "2rem",
-                  fontWeight: 800,
-                  letterSpacing: -1.1,
-                  color: "#00342B"
-                }}
-              >
-                Related Change Orders
-              </Typography>
-            </Box>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr",
-                px: 4,
-                py: 2.4,
-                backgroundColor: "#D5ECF8"
-              }}
-            >
-              {["ID", "Title", "Impact", "Status"].map((item) => (
-                <Typography
-                  key={item}
-                  sx={{
-                    fontSize: "0.72rem",
-                    fontWeight: 900,
-                    letterSpacing: 2,
-                    textTransform: "uppercase",
-                    color: "#93A6C3"
-                  }}
-                >
-                  {item}
-                </Typography>
-              ))}
-            </Box>
-
-            {relatedChangeRows.map((row, index) => (
-              <Box
-                key={row.id}
-                onClick={() => navigate(`/app/change-orders?projectId=${projectId}`)}
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr",
-                  alignItems: "center",
-                  px: 4,
-                  py: 3.1,
-                  cursor: "pointer",
-                  backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F9FCFF",
-                  transition: "background-color 160ms ease",
-                  "&:hover": {
-                    backgroundColor: "#F3FAFF"
-                  }
-                }}
-              >
-                <Typography sx={{ fontSize: "0.94rem", fontWeight: 800, color: "#00342B" }}>{row.id}</Typography>
-                <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "#071E27" }}>{row.title}</Typography>
-                <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
-                  {row.impact >= 0 ? "+" : "-"}
-                  {formatCurrency(Math.abs(row.impact))}
-                </Typography>
-                <Box sx={{ justifySelf: "start" }}>
-                  <Box
-                    sx={{
-                      display: "inline-flex",
-                      px: 1.4,
-                      py: 0.8,
-                      borderRadius: 999,
-                      backgroundColor: row.status === "approved" ? "#9DEFDE" : "#FFDBD1",
-                      color: row.status === "approved" ? "#0F6F62" : "#872000"
-                    }}
-                  >
-                    <Typography
-                      sx={{
-                        fontSize: "0.72rem",
-                        fontWeight: 900,
-                        letterSpacing: 1.2,
-                        textTransform: "uppercase"
-                      }}
-                    >
-                      {row.status}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-            ))}
-
-            <ButtonBase
-              onClick={() => navigate(`/app/change-orders?projectId=${projectId}`)}
-              sx={{ width: "100%", py: 2.6, backgroundColor: "#D5ECF8", color: "#046B5E" }}
-            >
-              <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View Full Change History</Typography>
-            </ButtonBase>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
               p: 0,
               overflow: "hidden",
               borderRadius: 5,
@@ -894,7 +1245,10 @@ export function ProjectDetailsPage() {
         }}
         onCreated={async () => {
           await refreshTeamMembers();
-          setMessage(selectedTeamMember ? "Team member updated." : "Team member added to the on-site roster.");
+          showToast({
+            message: selectedTeamMember ? "Team member updated." : "Team member added to the on-site roster.",
+            severity: "success"
+          });
         }}
       />
       <EditProjectModal
@@ -903,18 +1257,25 @@ export function ProjectDetailsPage() {
         onClose={() => setEditProjectOpen(false)}
         onSaved={async (updatedProject) => {
           setProject(updatedProject);
-          setMessage("Project details updated.");
+          showToast({
+            message: "Project details updated.",
+            severity: "success"
+          });
         }}
       />
       <ProjectDocumentVaultModal
         open={documentVaultOpen}
         project={project}
         documents={documents}
+        teamMembers={teamMembers}
         canEdit={canManageProject}
         onClose={() => setDocumentVaultOpen(false)}
         onCreated={async () => {
           await refreshDocuments();
-          setMessage("Project vault updated.");
+          showToast({
+            message: "Project vault updated.",
+            severity: "success"
+          });
         }}
       />
     </Stack>

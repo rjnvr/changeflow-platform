@@ -37,6 +37,12 @@ export const projectController = {
       data: await projectService.listTeamDirectory()
     });
   },
+  async generateBrief(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.generateProjectBrief(getRouteParam(request.params.projectId), request.user!)
+    });
+  },
   async addTeamMember(request: Request, response: Response) {
     response.status(201).json({
       success: true,

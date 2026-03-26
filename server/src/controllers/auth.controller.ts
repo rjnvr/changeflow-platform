@@ -2,6 +2,14 @@ import type { Request, Response } from "express";
 
 import { authService } from "../services/auth.service.js";
 
+function getRouteParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+
+  return value ?? "";
+}
+
 export const authController = {
   async login(request: Request, response: Response) {
     const { email, password } = request.body;
@@ -48,6 +56,28 @@ export const authController = {
     response.json({
       success: true,
       data: await authService.changePassword(request.user!.id, request.body)
+    });
+  },
+  async listBriefQuotas(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await authService.getBriefQuotaDashboard(request.user!)
+    });
+  },
+  async applyBriefQuotaToAll(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await authService.applyDailyBriefQuotaToAllUsers(request.user!, request.body.dailyProjectBriefLimit)
+    });
+  },
+  async updateBriefQuota(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await authService.updateUserProjectBriefLimit(
+        request.user!,
+        getRouteParam(request.params.userId),
+        request.body.dailyProjectBriefLimit
+      )
     });
   }
 };

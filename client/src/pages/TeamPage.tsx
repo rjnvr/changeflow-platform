@@ -1,21 +1,32 @@
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
 import PersonSearchRoundedIcon from "@mui/icons-material/PersonSearchRounded";
 import PlaceRoundedIcon from "@mui/icons-material/PlaceRounded";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
+import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { applyBriefQuotaToAll, getBriefQuotaDashboard, updateUserBriefQuota } from "../api/auth";
 import { AddTeamMemberModal } from "../components/projects/AddTeamMemberModal";
 import { WorkspaceFooter } from "../components/layout/WorkspaceFooter";
+import { useAuthContext } from "../context/AuthContext";
+import { useFeedbackContext } from "../context/FeedbackContext";
 import { useProjectTeamDirectory } from "../hooks/useProjectTeamDirectory";
 import { useProjects } from "../hooks/useProjects";
+import type { BriefQuotaDashboard } from "../types/auth";
+import { formatDate } from "../utils/formatDate";
 
 function initials(name: string) {
   return name
@@ -26,13 +37,131 @@ function initials(name: string) {
     .join("");
 }
 
+function normalizeLookup(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ").replace(/\s*\(.*\)\s*$/, "");
+}
+
 export function TeamPage() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
+  const { showToast } = useFeedbackContext();
   const { projects } = useProjects();
   const { entries, error, refresh } = useProjectTeamDirectory();
   const [search, setSearch] = useState("");
   const [activeProjectId, setActiveProjectId] = useState<string>("all");
   const [modalProjectId, setModalProjectId] = useState<string | null>(null);
+  const [quotaDashboard, setQuotaDashboard] = useState<BriefQuotaDashboard | null>(null);
+  const [quotaError, setQuotaError] = useState("");
+  const [quotaSavingUserId, setQuotaSavingUserId] = useState<string | null>(null);
+  const [quotaApplyAllLoading, setQuotaApplyAllLoading] = useState(false);
+  const [quotaDrafts, setQuotaDrafts] = useState<Record<string, string>>({});
+  const [teamQuotaDraft, setTeamQuotaDraft] = useState("3");
+  const [expandedQuotaProjectIds, setExpandedQuotaProjectIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (user?.role !== "admin") {
+      return;
+    }
+
+    getBriefQuotaDashboard()
+      .then((dashboard) => {
+        setQuotaDashboard(dashboard);
+        setQuotaDrafts(
+          Object.fromEntries(dashboard.users.map((quotaUser) => [quotaUser.id, String(quotaUser.dailyProjectBriefLimit)]))
+        );
+        setTeamQuotaDraft(String(dashboard.users[0]?.dailyProjectBriefLimit ?? 3));
+      })
+      .catch((requestError) => {
+        setQuotaError(requestError instanceof Error ? requestError.message : "Unable to load brief quotas.");
+      });
+  }, [user?.role]);
+
+  const quotaGrouping = useMemo(() => {
+    if (!quotaDashboard) {
+      return {
+        groupedUsers: [] as Array<{
+          projectId: string;
+          projectName: string;
+          projectCode: string;
+          projectLocation: string;
+          users: BriefQuotaDashboard["users"];
+        }>,
+        unassignedUsers: [] as BriefQuotaDashboard["users"]
+      };
+    }
+
+    const quotaUsersByName = new Map<string, BriefQuotaDashboard["users"]>();
+
+    quotaDashboard.users.forEach((quotaUser) => {
+      const key = normalizeLookup(`${quotaUser.firstName} ${quotaUser.lastName}`);
+      const existing = quotaUsersByName.get(key) ?? [];
+      quotaUsersByName.set(key, [...existing, quotaUser]);
+    });
+
+    const groups = new Map<
+      string,
+      {
+        projectId: string;
+        projectName: string;
+        projectCode: string;
+        projectLocation: string;
+        users: BriefQuotaDashboard["users"];
+      }
+    >();
+    const matchedUserIds = new Set<string>();
+
+    entries.forEach((entry) => {
+      const key = normalizeLookup(entry.name);
+      const matchedUsers = quotaUsersByName.get(key) ?? [];
+
+      if (!groups.has(entry.projectId)) {
+        groups.set(entry.projectId, {
+          projectId: entry.projectId,
+          projectName: entry.projectName,
+          projectCode: entry.projectCode,
+          projectLocation: entry.projectLocation,
+          users: []
+        });
+      }
+
+      const group = groups.get(entry.projectId)!;
+
+      matchedUsers.forEach((matchedUser) => {
+        if (group.users.some((groupUser) => groupUser.id === matchedUser.id)) {
+          return;
+        }
+
+        group.users.push(matchedUser);
+        matchedUserIds.add(matchedUser.id);
+      });
+    });
+
+    const groupedUsers = [...groups.values()].sort((left, right) => {
+      if (right.users.length !== left.users.length) {
+        return right.users.length - left.users.length;
+      }
+
+      return left.projectName.localeCompare(right.projectName);
+    });
+    const unassignedUsers = quotaDashboard.users.filter((quotaUser) => !matchedUserIds.has(quotaUser.id));
+
+    return { groupedUsers, unassignedUsers };
+  }, [entries, quotaDashboard]);
+
+  useEffect(() => {
+    if (!quotaDashboard) {
+      return;
+    }
+
+    setExpandedQuotaProjectIds((currentExpandedProjectIds) => {
+      if (currentExpandedProjectIds.length > 0) {
+        return currentExpandedProjectIds;
+      }
+
+      const firstProjectId = quotaGrouping.groupedUsers[0]?.projectId;
+      return firstProjectId ? [firstProjectId] : [];
+    });
+  }, [quotaDashboard, quotaGrouping.groupedUsers]);
 
   const filteredEntries = useMemo(
     () =>
@@ -83,6 +212,50 @@ export function TeamPage() {
   }, [filteredEntries]);
 
   const uncoveredProjects = projects.filter((project) => !entries.some((entry) => entry.projectId === project.id)).length;
+
+  async function refreshQuotaDashboard() {
+    const refreshedDashboard = await getBriefQuotaDashboard();
+    setQuotaDashboard(refreshedDashboard);
+    setQuotaDrafts(
+      Object.fromEntries(refreshedDashboard.users.map((quotaUser) => [quotaUser.id, String(quotaUser.dailyProjectBriefLimit)]))
+    );
+  }
+
+  async function handleSaveQuota(quotaUserId: string) {
+    const nextLimit = Number(quotaDrafts[quotaUserId] ?? quotaDashboard?.users.find((item) => item.id === quotaUserId)?.dailyProjectBriefLimit ?? 3);
+
+    if (!Number.isFinite(nextLimit) || nextLimit < 1 || nextLimit > 150) {
+      setQuotaError("Daily limits must be between 1 and 150.");
+      return;
+    }
+
+    setQuotaSavingUserId(quotaUserId);
+    setQuotaError("");
+
+    try {
+      await updateUserBriefQuota(quotaUserId, nextLimit);
+      await refreshQuotaDashboard();
+      const quotaUser = quotaDashboard?.users.find((item) => item.id === quotaUserId);
+      showToast({
+        message: quotaUser
+          ? `Updated ${quotaUser.firstName} ${quotaUser.lastName}'s daily brief limit.`
+          : "Daily brief limit updated.",
+        severity: "success"
+      });
+    } catch (requestError) {
+      setQuotaError(requestError instanceof Error ? requestError.message : "Unable to update brief quota.");
+    } finally {
+      setQuotaSavingUserId(null);
+    }
+  }
+
+  function toggleQuotaProject(projectId: string) {
+    setExpandedQuotaProjectIds((currentExpandedProjectIds) =>
+      currentExpandedProjectIds.includes(projectId)
+        ? currentExpandedProjectIds.filter((currentProjectId) => currentProjectId !== projectId)
+        : [...currentExpandedProjectIds, projectId]
+    );
+  }
 
   return (
     <Stack spacing={4}>
@@ -269,6 +442,507 @@ export function TeamPage() {
           </Stack>
         </Stack>
       </Paper>
+
+      {user?.role === "admin" ? (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3.2,
+            borderRadius: 4,
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+          }}
+        >
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
+            gap={2}
+            sx={{ mb: 3 }}
+          >
+            <Box sx={{ maxWidth: 760 }}>
+              <Stack direction="row" spacing={1.2} alignItems="center">
+                <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "1.9rem",
+                    fontWeight: 800,
+                    letterSpacing: -1,
+                    color: "#00342B"
+                  }}
+                >
+                  Project Brief Quotas
+                </Typography>
+              </Stack>
+              <Typography sx={{ mt: 0.9, fontSize: "1rem", color: "#5A6A84", lineHeight: 1.65 }}>
+                Manage how many Claude-powered project briefs each user can generate per day. The default is 3 per day for every user, while the workspace is still capped at 150 total generations per month.
+              </Typography>
+            </Box>
+
+            {quotaDashboard ? (
+              <Stack spacing={0.6} sx={{ alignItems: { xs: "flex-start", md: "flex-end" } }}>
+                <Typography
+                  sx={{
+                    fontSize: "0.78rem",
+                    fontWeight: 900,
+                    letterSpacing: 1.8,
+                    textTransform: "uppercase",
+                    color: "#93A6C3"
+                  }}
+                >
+                  Monthly Pool
+                </Typography>
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "2rem",
+                    fontWeight: 800,
+                    letterSpacing: -1,
+                    color: "#00342B"
+                  }}
+                >
+                  {quotaDashboard.globalUsed} / {quotaDashboard.globalLimit}
+                </Typography>
+                <Typography sx={{ fontSize: "0.86rem", color: "#5A6A84" }}>
+                  {quotaDashboard.globalRemaining} remaining • resets after {formatDate(quotaDashboard.monthEnd)}
+                </Typography>
+              </Stack>
+            ) : null}
+          </Stack>
+
+          <Paper
+            elevation={0}
+            sx={{
+              mb: 3,
+              p: 2.2,
+              borderRadius: 3,
+              backgroundColor: "#F3FAFF",
+              border: "1px solid rgba(213,236,248,0.92)"
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              alignItems={{ xs: "stretch", md: "center" }}
+              justifyContent="space-between"
+            >
+              <Box sx={{ maxWidth: 700 }}>
+                <Typography sx={{ fontSize: "0.9rem", fontWeight: 900, color: "#00342B" }}>
+                  Apply a daily brief limit to everyone
+                </Typography>
+                <Typography sx={{ mt: 0.4, fontSize: "0.9rem", color: "#5A6A84" }}>
+                  Quickly set the same daily Claude brief limit across the whole team.
+                </Typography>
+              </Box>
+
+              <Stack direction="row" spacing={1.2} alignItems="center">
+                <TextField
+                  type="number"
+                  value={teamQuotaDraft}
+                  onChange={(event) => setTeamQuotaDraft(event.target.value)}
+                  inputProps={{ min: 1, max: 150 }}
+                  sx={{
+                    width: 120,
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 2.8,
+                      backgroundColor: "#E6F6FF"
+                    }
+                  }}
+                />
+                <ButtonBase
+                  onClick={async () => {
+                    const nextLimit = Number(teamQuotaDraft);
+
+                    if (!Number.isFinite(nextLimit) || nextLimit < 1 || nextLimit > 150) {
+                      setQuotaError("Daily limits must be between 1 and 150.");
+                      return;
+                    }
+
+                    setQuotaApplyAllLoading(true);
+                    setQuotaError("");
+
+                    try {
+                      await applyBriefQuotaToAll(nextLimit);
+                      await refreshQuotaDashboard();
+                      setTeamQuotaDraft(String(nextLimit));
+                      showToast({
+                        message: `Applied a ${nextLimit}/day brief limit across the team.`,
+                        severity: "success"
+                      });
+                    } catch (requestError) {
+                      setQuotaError(requestError instanceof Error ? requestError.message : "Unable to apply daily quota.");
+                    } finally {
+                      setQuotaApplyAllLoading(false);
+                    }
+                  }}
+                  sx={{
+                    px: 2,
+                    py: 1.15,
+                    borderRadius: 2.2,
+                    backgroundColor: "#00342B",
+                    color: "#FFFFFF",
+                    opacity: quotaApplyAllLoading ? 0.7 : 1
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>
+                    {quotaApplyAllLoading ? "Applying..." : "Apply to Everyone"}
+                  </Typography>
+                </ButtonBase>
+              </Stack>
+            </Stack>
+          </Paper>
+
+          {quotaError ? <Alert severity="warning" sx={{ mb: 3 }}>{quotaError}</Alert> : null}
+
+          {quotaDashboard ? (
+            <Stack spacing={1.4}>
+              {quotaGrouping.groupedUsers.map((quotaGroup) => {
+                const expanded = expandedQuotaProjectIds.includes(quotaGroup.projectId);
+
+                return (
+                  <Accordion
+                    key={quotaGroup.projectId}
+                    expanded={expanded}
+                    onChange={() => toggleQuotaProject(quotaGroup.projectId)}
+                    disableGutters
+                    elevation={0}
+                    sx={{
+                      borderRadius: 3,
+                      overflow: "hidden",
+                      border: "1px solid rgba(213,236,248,0.92)",
+                      backgroundColor: "#F8FCFF",
+                      "&:before": {
+                        display: "none"
+                      }
+                    }}
+                  >
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#00342B" }} />}
+                      sx={{
+                        px: 2.2,
+                        py: 0.6,
+                        "& .MuiAccordionSummary-content": {
+                          my: 1.1
+                        }
+                      }}
+                    >
+                      <Stack
+                        direction={{ xs: "column", md: "row" }}
+                        spacing={1.2}
+                        alignItems={{ xs: "flex-start", md: "center" }}
+                        justifyContent="space-between"
+                        sx={{ width: "100%" }}
+                      >
+                        <Box>
+                          <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                            {quotaGroup.projectName}
+                          </Typography>
+                          <Typography sx={{ mt: 0.35, fontSize: "0.86rem", color: "#5A6A84" }}>
+                            {quotaGroup.projectLocation} • {quotaGroup.projectCode}
+                          </Typography>
+                        </Box>
+
+                        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+                          <Chip
+                            label={`${quotaGroup.users.length} account${quotaGroup.users.length === 1 ? "" : "s"}`}
+                            sx={{
+                              backgroundColor: "#D5ECF8",
+                              color: "#00342B",
+                              fontWeight: 800
+                            }}
+                          />
+                          <Chip
+                            label={expanded ? "Hide members" : "Show members"}
+                            sx={{
+                              backgroundColor: expanded ? "#00342B" : "#E6F6FF",
+                              color: expanded ? "#FFFFFF" : "#00342B",
+                              fontWeight: 800
+                            }}
+                          />
+                        </Stack>
+                      </Stack>
+                    </AccordionSummary>
+
+                    <AccordionDetails sx={{ px: 2.2, pb: 2.2, pt: 0.2 }}>
+                      {quotaGroup.users.length > 0 ? (
+                        <Stack spacing={1.2}>
+                          {quotaGroup.users.map((quotaUser) => (
+                            <Box
+                              key={`${quotaGroup.projectId}-${quotaUser.id}`}
+                              sx={{
+                                display: "grid",
+                                gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.4fr) 180px 160px 140px" },
+                                gap: 2,
+                                alignItems: "center",
+                                p: 2,
+                                borderRadius: 2.6,
+                                backgroundColor: "#FFFFFF",
+                                border: "1px solid rgba(213,236,248,0.9)"
+                              }}
+                            >
+                              <Box>
+                                <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                                  {quotaUser.firstName} {quotaUser.lastName}
+                                </Typography>
+                                <Typography sx={{ mt: 0.35, fontSize: "0.88rem", color: "#5A6A84" }}>
+                                  {quotaUser.email} • {quotaUser.role.replace("_", " ")}
+                                </Typography>
+                              </Box>
+
+                              <Box>
+                                <Typography
+                                  sx={{
+                                    mb: 0.7,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 900,
+                                    letterSpacing: 1.6,
+                                    textTransform: "uppercase",
+                                    color: "#93A6C3"
+                                  }}
+                                >
+                                  Daily Limit
+                                </Typography>
+                                <TextField
+                                  type="number"
+                                  value={quotaDrafts[quotaUser.id] ?? String(quotaUser.dailyProjectBriefLimit)}
+                                  onChange={(event) =>
+                                    setQuotaDrafts((current) => ({
+                                      ...current,
+                                      [quotaUser.id]: event.target.value
+                                    }))
+                                  }
+                                  inputProps={{ min: 1, max: 150 }}
+                                  sx={{
+                                    width: "100%",
+                                    "& .MuiOutlinedInput-root": {
+                                      borderRadius: 2.8,
+                                      backgroundColor: "#E6F6FF"
+                                    }
+                                  }}
+                                />
+                              </Box>
+
+                              <Box>
+                                <Typography
+                                  sx={{
+                                    mb: 0.7,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 900,
+                                    letterSpacing: 1.6,
+                                    textTransform: "uppercase",
+                                    color: "#93A6C3"
+                                  }}
+                                >
+                                  Today
+                                </Typography>
+                                <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                                  {quotaUser.usedToday} used
+                                </Typography>
+                                <Typography sx={{ mt: 0.35, fontSize: "0.84rem", color: "#5A6A84" }}>
+                                  {quotaUser.remainingToday} remaining
+                                </Typography>
+                              </Box>
+
+                              <ButtonBase
+                                onClick={() => {
+                                  void handleSaveQuota(quotaUser.id);
+                                }}
+                                sx={{
+                                  justifySelf: { xs: "stretch", lg: "end" },
+                                  px: 2,
+                                  py: 1.15,
+                                  borderRadius: 2.2,
+                                  backgroundColor: "#00342B",
+                                  color: "#FFFFFF",
+                                  opacity: quotaSavingUserId === quotaUser.id ? 0.7 : 1
+                                }}
+                              >
+                                <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>
+                                  {quotaSavingUserId === quotaUser.id ? "Saving..." : "Save Limit"}
+                                </Typography>
+                              </ButtonBase>
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography sx={{ fontSize: "0.92rem", color: "#5A6A84" }}>
+                          No account-linked users from the current workspace roster were matched to this project yet.
+                        </Typography>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                );
+              })}
+
+              {quotaGrouping.unassignedUsers.length > 0 ? (
+                <Accordion
+                  expanded={expandedQuotaProjectIds.includes("unassigned")}
+                  onChange={() => toggleQuotaProject("unassigned")}
+                  disableGutters
+                  elevation={0}
+                  sx={{
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    border: "1px solid rgba(213,236,248,0.92)",
+                    backgroundColor: "#F8FCFF",
+                    "&:before": {
+                      display: "none"
+                    }
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#00342B" }} />}
+                    sx={{
+                      px: 2.2,
+                      py: 0.6,
+                      "& .MuiAccordionSummary-content": {
+                        my: 1.1
+                      }
+                    }}
+                  >
+                    <Stack
+                      direction={{ xs: "column", md: "row" }}
+                      spacing={1.2}
+                      alignItems={{ xs: "flex-start", md: "center" }}
+                      justifyContent="space-between"
+                      sx={{ width: "100%" }}
+                    >
+                      <Box>
+                        <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                          Unassigned Workspace Accounts
+                        </Typography>
+                        <Typography sx={{ mt: 0.35, fontSize: "0.86rem", color: "#5A6A84" }}>
+                          Users with app access who are not currently matched to a project team roster entry.
+                        </Typography>
+                      </Box>
+
+                      <Chip
+                        label={`${quotaGrouping.unassignedUsers.length} account${quotaGrouping.unassignedUsers.length === 1 ? "" : "s"}`}
+                        sx={{
+                          backgroundColor: "#D5ECF8",
+                          color: "#00342B",
+                          fontWeight: 800
+                        }}
+                      />
+                    </Stack>
+                  </AccordionSummary>
+
+                  <AccordionDetails sx={{ px: 2.2, pb: 2.2, pt: 0.2 }}>
+                    <Stack spacing={1.2}>
+                      {quotaGrouping.unassignedUsers.map((quotaUser) => (
+                        <Box
+                          key={`unassigned-${quotaUser.id}`}
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.4fr) 180px 160px 140px" },
+                            gap: 2,
+                            alignItems: "center",
+                            p: 2,
+                            borderRadius: 2.6,
+                            backgroundColor: "#FFFFFF",
+                            border: "1px solid rgba(213,236,248,0.9)"
+                          }}
+                        >
+                          <Box>
+                            <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                              {quotaUser.firstName} {quotaUser.lastName}
+                            </Typography>
+                            <Typography sx={{ mt: 0.35, fontSize: "0.88rem", color: "#5A6A84" }}>
+                              {quotaUser.email} • {quotaUser.role.replace("_", " ")}
+                            </Typography>
+                          </Box>
+
+                          <Box>
+                            <Typography
+                              sx={{
+                                mb: 0.7,
+                                fontSize: "0.72rem",
+                                fontWeight: 900,
+                                letterSpacing: 1.6,
+                                textTransform: "uppercase",
+                                color: "#93A6C3"
+                              }}
+                            >
+                              Daily Limit
+                            </Typography>
+                            <TextField
+                              type="number"
+                              value={quotaDrafts[quotaUser.id] ?? String(quotaUser.dailyProjectBriefLimit)}
+                              onChange={(event) =>
+                                setQuotaDrafts((current) => ({
+                                  ...current,
+                                  [quotaUser.id]: event.target.value
+                                }))
+                              }
+                              inputProps={{ min: 1, max: 150 }}
+                              sx={{
+                                width: "100%",
+                                "& .MuiOutlinedInput-root": {
+                                  borderRadius: 2.8,
+                                  backgroundColor: "#E6F6FF"
+                                }
+                              }}
+                            />
+                          </Box>
+
+                          <Box>
+                            <Typography
+                              sx={{
+                                mb: 0.7,
+                                fontSize: "0.72rem",
+                                fontWeight: 900,
+                                letterSpacing: 1.6,
+                                textTransform: "uppercase",
+                                color: "#93A6C3"
+                              }}
+                            >
+                              Today
+                            </Typography>
+                            <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                              {quotaUser.usedToday} used
+                            </Typography>
+                            <Typography sx={{ mt: 0.35, fontSize: "0.84rem", color: "#5A6A84" }}>
+                              {quotaUser.remainingToday} remaining
+                            </Typography>
+                          </Box>
+
+                          <ButtonBase
+                            onClick={() => {
+                              void handleSaveQuota(quotaUser.id);
+                            }}
+                            sx={{
+                              justifySelf: { xs: "stretch", lg: "end" },
+                              px: 2,
+                              py: 1.15,
+                              borderRadius: 2.2,
+                              backgroundColor: "#00342B",
+                              color: "#FFFFFF",
+                              opacity: quotaSavingUserId === quotaUser.id ? 0.7 : 1
+                            }}
+                          >
+                            <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>
+                              {quotaSavingUserId === quotaUser.id ? "Saving..." : "Save Limit"}
+                            </Typography>
+                          </ButtonBase>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+              ) : null}
+            </Stack>
+          ) : quotaError ? (
+            <Typography sx={{ fontSize: "0.96rem", color: "#5A6A84" }}>
+              Daily brief quota controls are unavailable right now.
+            </Typography>
+          ) : (
+            <Typography sx={{ fontSize: "0.96rem", color: "#5A6A84" }}>
+              Loading daily brief quota settings...
+            </Typography>
+          )}
+        </Paper>
+      ) : null}
 
       <Stack spacing={2.5}>
         {groupedEntries.map((group) => (

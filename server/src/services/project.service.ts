@@ -3,11 +3,83 @@ import { projectDocumentRepository } from "../repositories/projectDocument.repos
 import { projectTeamMemberRepository } from "../repositories/projectTeamMember.repository.js";
 import type { AuthenticatedUser } from "../types/domain.js";
 import { ApiError } from "../utils/apiError.js";
+import { changeOrderRepository } from "../repositories/changeOrder.repository.js";
+import { projectBriefGenerationRepository } from "../repositories/projectBriefGeneration.repository.js";
+import { userRepository } from "../repositories/user.repository.js";
 import { auditLogService } from "./auditLog.service.js";
+import { aiSummaryService } from "./aiSummary.service.js";
 import { storageService } from "./storage.service.js";
 
 function canEditProject(user: AuthenticatedUser, ownerId: string) {
   return user.role === "admin" || user.id === ownerId;
+}
+
+const GLOBAL_PROJECT_BRIEF_MONTHLY_LIMIT = 150;
+
+function getMonthlyWindow(referenceDate = new Date()) {
+  const monthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+  const monthEnd = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 1);
+
+  return { monthStart, monthEnd };
+}
+
+function getDailyWindow(referenceDate = new Date()) {
+  const dayStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  const dayEnd = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate() + 1);
+
+  return { dayStart, dayEnd };
+}
+
+function autoAssignDocumentToTeamMember(
+  input: {
+    title: string;
+    kind: string;
+    summary: string;
+    assignedTo?: string;
+  },
+  teamMembers: Array<{ name: string; role: string }>
+) {
+  const manualAssignment = input.assignedTo?.trim();
+
+  if (manualAssignment) {
+    return manualAssignment;
+  }
+
+  if (teamMembers.length === 0) {
+    return undefined;
+  }
+
+  const normalizedContent = `${input.title} ${input.kind} ${input.summary}`.toLowerCase();
+  const rules = [
+    {
+      contentKeywords: ["drawing", "layout", "spec", "architect", "plan", "dwg"],
+      roleKeywords: ["architect", "architecture", "design", "engineer"]
+    },
+    {
+      contentKeywords: ["quote", "budget", "invoice", "pricing", "cost", "commercial"],
+      roleKeywords: ["commercial", "account", "finance", "executive", "cost"]
+    },
+    {
+      contentKeywords: ["report", "photo", "inspection", "progress", "field", "daily"],
+      roleKeywords: ["superintendent", "site", "foreman", "lead", "field", "super"]
+    }
+  ];
+
+  for (const rule of rules) {
+    if (!rule.contentKeywords.some((keyword) => normalizedContent.includes(keyword))) {
+      continue;
+    }
+
+    const matchedTeamMember = teamMembers.find((teamMember) =>
+      rule.roleKeywords.some((keyword) => teamMember.role.toLowerCase().includes(keyword))
+    );
+
+    if (matchedTeamMember) {
+      return matchedTeamMember.name;
+    }
+  }
+
+  return teamMembers[0]?.name;
 }
 
 export const projectService = {
@@ -29,6 +101,58 @@ export const projectService = {
   },
   async listTeamDirectory() {
     return projectTeamMemberRepository.listDirectory();
+  },
+  async generateProjectBrief(projectId: string, requestUser: AuthenticatedUser) {
+    const project = await this.getProject(projectId);
+    const user = await userRepository.findById(requestUser.id);
+
+    if (!user) {
+      throw new ApiError(404, "User not found.");
+    }
+
+    const { monthStart, monthEnd } = getMonthlyWindow();
+    const { dayStart, dayEnd } = getDailyWindow();
+    const [globalUsed, userUsed, changeOrders, teamMembers, documents] = await Promise.all([
+      projectBriefGenerationRepository.countForMonth(monthStart, monthEnd),
+      projectBriefGenerationRepository.countForUserDay(user.id, dayStart, dayEnd),
+      changeOrderRepository.list(projectId, { includeArchived: true }),
+      projectTeamMemberRepository.listByProject(projectId),
+      projectDocumentRepository.listByProject(projectId)
+    ]);
+
+    if (globalUsed >= GLOBAL_PROJECT_BRIEF_MONTHLY_LIMIT) {
+      throw new ApiError(429, "The workspace has reached its monthly project brief limit of 150 generations.");
+    }
+
+    if (userUsed >= user.dailyProjectBriefLimit) {
+      throw new ApiError(429, `You have reached your daily project brief limit of ${user.dailyProjectBriefLimit}.`);
+    }
+
+    const brief = await aiSummaryService.generateProjectBrief({
+      project,
+      changeOrders,
+      teamMembers,
+      documents,
+      usage: {
+        userLimit: user.dailyProjectBriefLimit,
+        userUsed: userUsed + 1,
+        userRemaining: Math.max(0, user.dailyProjectBriefLimit - (userUsed + 1)),
+        dayStart: dayStart.toISOString(),
+        dayEnd: dayEnd.toISOString(),
+        globalLimit: GLOBAL_PROJECT_BRIEF_MONTHLY_LIMIT,
+        globalUsed: globalUsed + 1,
+        globalRemaining: Math.max(0, GLOBAL_PROJECT_BRIEF_MONTHLY_LIMIT - (globalUsed + 1)),
+        monthStart: monthStart.toISOString(),
+        monthEnd: monthEnd.toISOString()
+      }
+    });
+
+    await projectBriefGenerationRepository.create({
+      userId: user.id,
+      projectId
+    });
+
+    return brief;
   },
   async addTeamMember(projectId: string, input: { name: string; role: string }) {
     const project = await this.getProject(projectId);
@@ -118,6 +242,7 @@ export const projectService = {
       title: string;
       kind: string;
       summary: string;
+      assignedTo?: string;
       url?: string;
       storageKey?: string;
       fileName?: string;
@@ -131,11 +256,15 @@ export const projectService = {
       throw new ApiError(400, "Archived projects are read-only.");
     }
 
+    const teamMembers = await projectTeamMemberRepository.listByProject(projectId);
+    const assignedTo = autoAssignDocumentToTeamMember(input, teamMembers);
+
     const document = await projectDocumentRepository.create({
       projectId,
       title: input.title,
       kind: input.kind,
       summary: input.summary,
+      assignedTo,
       url: input.url?.trim() ? input.url.trim() : undefined,
       storageKey: input.storageKey,
       fileName: input.fileName,
@@ -146,7 +275,8 @@ export const projectService = {
     await auditLogService.record("project.document.created", "projectDocument", document.id, {
       projectId,
       title: document.title,
-      kind: document.kind
+      kind: document.kind,
+      assignedTo: document.assignedTo
     });
 
     return document;
@@ -159,6 +289,7 @@ export const projectService = {
       title: string;
       kind: string;
       summary: string;
+      assignedTo?: string;
       url?: string;
     }
   ) {
@@ -172,10 +303,14 @@ export const projectService = {
       throw new ApiError(403, "Only the project owner can edit documents.");
     }
 
+    const teamMembers = await projectTeamMemberRepository.listByProject(projectId);
+    const assignedTo = autoAssignDocumentToTeamMember(input, teamMembers);
+
     const updatedDocument = await projectDocumentRepository.update(projectId, documentId, {
       title: input.title.trim(),
       kind: input.kind.trim(),
       summary: input.summary.trim(),
+      assignedTo,
       url: input.url?.trim() ? input.url.trim() : undefined
     });
 
@@ -186,7 +321,8 @@ export const projectService = {
     await auditLogService.record("project.document.updated", "projectDocument", updatedDocument.id, {
       projectId,
       title: updatedDocument.title,
-      kind: updatedDocument.kind
+      kind: updatedDocument.kind,
+      assignedTo: updatedDocument.assignedTo
     });
 
     return updatedDocument;
