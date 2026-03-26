@@ -1,89 +1,212 @@
 # ChangeFlow Platform
 
-A student-friendly fullstack starter for a construction workflow SaaS focused on change orders, external integrations, audit trails, and automation.
+ChangeFlow Platform is a fullstack construction workflow SaaS focused on one of the highest-friction parts of commercial delivery: managing change orders from intake through review, approval, documentation, and external sync.
 
-## Tech stack
+The product is designed as an operations command center for project managers, accounting teams, and field leaders. It centralizes project portfolio visibility, document handling, approval workflows, integration health, and auditability in one system.
+
+## What The Project Does
+
+ChangeFlow helps construction teams:
+
+- create and track change orders across active projects
+- review commercial impact, approval status, and assignee ownership
+- upload and manage supporting documents and attachments with private S3-backed storage
+- maintain project team rosters and project-level document vaults
+- monitor integration health and manual sync workflows
+- archive completed or inactive records without losing traceability
+- generate AI-assisted commercial summaries using Claude
+- send email-based account and workflow notifications
+
+## Core Features
+
+### Auth And Account Management
+
+- JWT-based authentication with PostgreSQL-backed users
+- hashed passwords
+- self-service account creation
+- forgot-password and reset-password flow
+- logged-in account settings and password change
+- protected demo account behavior for stable showcase credentials
+
+### Project Portfolio Management
+
+- executive portfolio dashboard
+- project creation and editing
+- project detail command center
+- on-site team management
+- project archive flow with read-only enforcement
+
+### Change Order Workflow
+
+- create, edit, and archive change orders
+- assignee selection by project team
+- approval status transitions
+- review comments and activity history
+- dedicated change-order details page
+- CSV import flow
+- pagination, filtering, and search
+
+### File And Document Handling
+
+- S3-backed project document vault
+- S3-backed change-order attachments
+- presigned upload and download URLs
+- document editing and removal
+- attachment upload, open, and delete flows
+
+### Integrations And Automation
+
+- integrations center with sync health UI
+- webhook intake route
+- external sync service structure
+- email notification service
+- Claude-powered summary generation
+- audit log records for important workflow events
+
+## Tech Stack
 
 - Frontend: React, TypeScript, Vite, Material UI
 - Backend: Node.js, Express, TypeScript
-- Database: PostgreSQL with Prisma
+- Database: PostgreSQL + Prisma
 - Auth: JWT
-- Integrations: Slack webhook, email, mock external sync
-- AI add-on: Anthropic Claude summary generation with local fallback
+- Storage: AWS S3-compatible private uploads with presigned URLs
+- AI: Anthropic Claude
+- Email: provider-backed email service
+- Infra: Docker Compose for local Postgres
 
-## Project structure
+## Architecture
 
 ```text
 changeflow-platform/
-├── client/
-├── server/
-├── shared/
-├── docs/
-├── docker-compose.yml
-└── package.json
+├── client/                 # React + TypeScript frontend
+├── server/                 # Express + TypeScript API
+├── docs/                   # setup, architecture, and API notes
+├── docker-compose.yml      # local PostgreSQL
+└── package.json            # workspace scripts
 ```
 
-## Highlights
+Key backend areas:
 
-- Project and change-order focused API surface
-- Integration-friendly backend modules like `externalSync.service.ts`
-- Webhook entry point for external systems
-- CSV import job scaffold for ETL-style workflows
-- Audit logging service for traceability
-- Material UI frontend shell with dashboard, projects, and integrations pages
-- Secure local auth flow with hashed passwords, self-service access requests, and password reset
+- `server/src/routes` for the HTTP API surface
+- `server/src/services` for business logic and integrations
+- `server/src/repositories` for database access
+- `server/prisma` for schema and seed data
 
-## Getting started
+Key frontend areas:
 
-1. Install dependencies:
+- `client/src/pages` for main product surfaces
+- `client/src/components` for reusable UI and modals
+- `client/src/api` for typed API wrappers
+- `client/src/hooks` for data loading and stateful flows
 
-   ```bash
-   npm install
-   ```
+## Main Product Surfaces
 
-2. Start Postgres:
+- Public homepage
+- Premium login flow
+- Dashboard / Operations Center
+- Projects portfolio and project details
+- Change Orders pipeline and detail workspace
+- Integrations Center
+- Resources Hub
+- Dedicated API Docs page
 
-   ```bash
-   docker compose up -d
-   ```
+## Demo Credentials
 
-3. Set environment variables for the server:
+Use the seeded demo account to explore the app quickly:
 
-   ```bash
-   cp server/.env.example server/.env
-   ```
+```text
+demo@changeflow.dev / password123
+```
 
-4. Generate Prisma client and run migrations:
+Additional seeded users:
 
-   ```bash
-   npm run prisma:generate --workspace server
-   npm run prisma:migrate --workspace server
-   npm run prisma:seed --workspace server
-   ```
+- `sarah.mitchell@changeflow.dev`
+- `marcus.chen@changeflow.dev`
 
-5. Run the apps:
+## Running Locally
 
-   ```bash
-   npm run dev
-   ```
+From the repo root:
 
-6. Sign in with the seeded demo account:
+```bash
+npm install
+cp server/.env.example server/.env
+docker compose up -d
+npm run prisma:generate --workspace server
+npm run prisma:migrate --workspace server
+npm run prisma:seed --workspace server
+npm run dev
+```
 
-   ```text
-   demo@changeflow.dev / password123
-   ```
+Open:
 
-## Auth flows
+- Frontend: `http://localhost:5173`
+- API: `http://localhost:4000/api`
+- API Docs page: `http://localhost:5173/api-docs`
 
-- `Log In` works against hashed local user records in Postgres.
-- `Request Platform Access` creates a new local account and signs the user in immediately.
-- `Forgot Password` sends a real reset email when `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` are configured.
-- If email is not configured, the reset flow automatically falls back to local preview mode and exposes the reset token in the UI for development.
-- New account signups and change-order status updates also use the same email delivery service.
+If your local demo data ever looks out of sync, reseed:
 
-## Suggested next steps
+```bash
+npm run prisma:seed --workspace server
+```
 
-- Replace stubbed repository logic with live Prisma queries everywhere
-- Add BullMQ for background job processing
-- Connect Slack, email, and Anthropic Claude credentials
-- Add tests and GitHub Actions CI
+## Important Docs
+
+- `docs/setup.md` for local environment setup
+- `docs/api-setup.md` for optional external API credentials
+- `docs/architecture.md` for the system overview
+
+## API Highlights
+
+The app ships with working routes for:
+
+- `auth`
+- `projects`
+- `project team members`
+- `project documents`
+- `change orders`
+- `change-order comments`
+- `change-order attachments`
+- `integrations`
+- `webhooks`
+
+There is also a dedicated in-app API reference page at:
+
+- `/api-docs`
+- `/app/api-docs`
+
+## Optional External Integrations
+
+The local app runs without external providers, but these make it feel closer to production:
+
+- `ANTHROPIC_API_KEY` for Claude summaries
+- `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL` for real email delivery
+- `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` for uploads
+- `SLACK_WEBHOOK_URL` for Slack alerts
+- `PROCORE_*`, `QUICKBOOKS_*`, `NETSUITE_*` for sandbox sync demos
+
+## Why This Is A Strong Portfolio Project
+
+This project is intentionally structured to show more than just CRUD:
+
+- multi-page product design with a polished SaaS UI
+- role-aware workflow behavior
+- real database-backed state
+- secure auth and password flows
+- file uploads and private object storage
+- AI-assisted workflow enrichment
+- integration-oriented backend architecture
+- audit logging, webhooks, and sync patterns
+
+## Suggested Resume Description
+
+**ChangeFlow Platform**  
+Built a fullstack construction workflow SaaS for managing project portfolios, change orders, approvals, document uploads, and integration health using React, TypeScript, Express, PostgreSQL, Prisma, AWS S3, and Anthropic Claude.
+
+## Current Status
+
+This project is feature-rich and demo-ready. The best remaining work is presentation and deployment polish:
+
+- improve README visuals with screenshots or a short demo GIF
+- add a few smoke tests
+- deploy the app
+- optionally connect more external providers
