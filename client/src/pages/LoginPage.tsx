@@ -7,6 +7,7 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import MailOutlineRoundedIcon from "@mui/icons-material/MailOutlineRounded";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import InputAdornment from "@mui/material/InputAdornment";
 import Paper from "@mui/material/Paper";
@@ -19,7 +20,7 @@ import { PasswordResetModal } from "../components/auth/PasswordResetModal";
 import { RegisterAccessModal } from "../components/auth/RegisterAccessModal";
 import { Button } from "../components/common/Button";
 import { useAuthContext } from "../context/AuthContext";
-import { DEMO_CREDENTIALS } from "../utils/constants";
+import { DEMO_ACCOUNTS, DEMO_CREDENTIALS } from "../utils/constants";
 
 const HERO_IMAGE =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuC1WjgmscZDubehCjeB-ybbBpkF0i7dYtQYklSwRrZdOyPESHHI1va_0KYHHbxJBIh9MvGhvlgxifO8DubkDHGtABXawwVbDIA4gQfww2mKSwXPkBM3QKDUOr7wyVV2aaNab_nqKaj-4JYSXVtAcD6yEoCtquRajKLHI6CiROy23F2wzuC9kmjyiveqNQrMfWKH6fXiOCVsL3DGBg7OOPvfOr1p25xvd4kBunFe-She_96Ro70YSNbjIcQ8q6Y0zdCKeU1MqClgtZb6";
@@ -68,8 +69,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, login, register, loading } = useAuthContext();
-  const [email, setEmail] = useState(DEMO_CREDENTIALS.email);
-  const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
+  const [email, setEmail] = useState<string>(DEMO_CREDENTIALS.email);
+  const [password, setPassword] = useState<string>(DEMO_CREDENTIALS.password);
   const [error, setError] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
@@ -480,7 +481,7 @@ export function LoginPage() {
                     backgroundColor: "#F4FAFE",
                     border: "1px solid rgba(112,121,117,0.16)"
                   }}
-                >
+                  >
                   <Typography
                     sx={{
                       fontFamily: '"Inter", "Manrope", sans-serif',
@@ -493,12 +494,49 @@ export function LoginPage() {
                   >
                     Demo Access
                   </Typography>
-                  <Typography sx={{ mt: 0.8, color: "#3F4945", fontSize: "0.95rem" }}>
-                    {DEMO_CREDENTIALS.email}
-                  </Typography>
-                  <Typography sx={{ mt: 0.25, color: "#3F4945", fontSize: "0.95rem" }}>
-                    {DEMO_CREDENTIALS.password}
-                  </Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1.4 }}>
+                    {DEMO_ACCOUNTS.map((account) => (
+                      <ButtonBase
+                        key={account.email}
+                        onClick={() => {
+                          setEmail(account.email);
+                          setPassword(account.password);
+                          setInfoMessage(`${account.label} credentials loaded.`);
+                          setError("");
+                        }}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 2.5,
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          textAlign: "left",
+                          border: "1px solid rgba(112,121,117,0.12)",
+                          backgroundColor: "#FFFFFF",
+                          "&:hover": {
+                            backgroundColor: "#EFF7FB"
+                          }
+                        }}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, color: "#046B5E" }}>
+                            {account.label}
+                          </Typography>
+                          <Typography sx={{ mt: 0.45, color: "#3F4945", fontSize: "0.93rem", wordBreak: "break-word" }}>
+                            {account.email}
+                          </Typography>
+                          <Typography sx={{ mt: 0.2, color: "#3F4945", fontSize: "0.93rem" }}>
+                            {account.password}
+                          </Typography>
+                          <Typography sx={{ mt: 0.55, color: "#7A869F", fontSize: "0.78rem" }}>
+                            {account.role}
+                          </Typography>
+                        </Box>
+                        <Typography sx={{ ml: 1.5, fontSize: "0.78rem", fontWeight: 800, color: "#00342B", flexShrink: 0 }}>
+                          Use
+                        </Typography>
+                      </ButtonBase>
+                    ))}
+                  </Stack>
                 </Paper>
               </Stack>
             </Box>

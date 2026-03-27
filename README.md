@@ -118,6 +118,12 @@ Use the seeded demo account to explore the app quickly:
 demo@changeflow.dev / password123
 ```
 
+Seeded team-member demo account:
+
+```text
+elena.park@changeflow.dev / password123
+```
+
 Additional seeded users:
 
 - `sarah.mitchell@changeflow.dev`

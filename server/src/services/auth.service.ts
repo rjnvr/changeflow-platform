@@ -13,12 +13,12 @@ import {
   verifyPassword
 } from "../utils/password.js";
 
-const demoAccountEmail = "demo@changeflow.dev";
+const protectedDemoAccountEmails = new Set(["demo@changeflow.dev", "elena.park@changeflow.dev"]);
 const GLOBAL_PROJECT_BRIEF_MONTHLY_LIMIT = 150;
 const DEFAULT_DAILY_PROJECT_BRIEF_LIMIT = 3;
 
 function isDemoAccountEmail(email: string) {
-  return email.trim().toLowerCase() === demoAccountEmail;
+  return protectedDemoAccountEmails.has(email.trim().toLowerCase());
 }
 
 function getMonthlyWindow(referenceDate = new Date()) {
@@ -108,7 +108,7 @@ export const authService = {
     }
 
     if (isDemoAccountEmail(user.email)) {
-      throw new ApiError(403, "Password reset is disabled for the demo account. Use the default demo credentials instead.");
+      throw new ApiError(403, "Password reset is disabled for seeded demo accounts. Use the default demo credentials instead.");
     }
 
     const rawToken = generatePasswordResetToken();
@@ -143,7 +143,7 @@ export const authService = {
     }
 
     if (isDemoAccountEmail(user.email)) {
-      throw new ApiError(403, "Password reset is disabled for the demo account. Use the default demo credentials instead.");
+      throw new ApiError(403, "Password reset is disabled for seeded demo accounts. Use the default demo credentials instead.");
     }
 
     await userRepository.updatePassword(user.id, hashPassword(password));

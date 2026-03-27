@@ -10,7 +10,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import { requestPasswordReset, resetPassword } from "../../api/auth";
-import { DEMO_CREDENTIALS } from "../../utils/constants";
+import { PROTECTED_DEMO_EMAILS } from "../../utils/constants";
 import { Button } from "../common/Button";
 
 const fieldStyles = {
@@ -75,8 +75,8 @@ export function PasswordResetModal({
       return;
     }
 
-    if (email.trim().toLowerCase() === DEMO_CREDENTIALS.email) {
-      setError("Password reset is disabled for the demo account. Sign in with the default demo credentials instead.");
+    if (PROTECTED_DEMO_EMAILS.includes(email.trim().toLowerCase())) {
+      setError("Password reset is disabled for seeded demo accounts. Sign in with the default demo credentials instead.");
       setInfo("");
       setResetRequested(false);
       return;

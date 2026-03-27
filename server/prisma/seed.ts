@@ -83,6 +83,15 @@ async function main() {
         dailyProjectBriefLimit: 3
       },
       {
+        id: "usr_demo_tm_1",
+        email: "elena.park@changeflow.dev",
+        firstName: "Elena",
+        lastName: "Park",
+        passwordHash: hashPassword("password123"),
+        role: UserRole.project_manager,
+        dailyProjectBriefLimit: 3
+      },
+      {
         id: "usr_acc_1",
         email: "marcus.chen@changeflow.dev",
         firstName: "Marcus",

@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import { useAuthContext } from "../../context/AuthContext";
+import { PROTECTED_DEMO_EMAILS } from "../../utils/constants";
 import { Button } from "../common/Button";
 
 interface AccountSettingsModalProps {
@@ -34,8 +35,6 @@ const fieldStyles = {
     }
   }
 } as const;
-
-const demoAccountEmail = "demo@changeflow.dev";
 
 export function AccountSettingsModal({ open, onClose }: AccountSettingsModalProps) {
   const { user, updateProfile, changePassword, loading } = useAuthContext();
@@ -67,7 +66,10 @@ export function AccountSettingsModal({ open, onClose }: AccountSettingsModalProp
     setPasswordError("");
   }, [open, user]);
 
-  const isDemoAccount = useMemo(() => user?.email === demoAccountEmail, [user?.email]);
+  const isDemoAccount = useMemo(
+    () => Boolean(user?.email && PROTECTED_DEMO_EMAILS.includes(user.email.toLowerCase())),
+    [user?.email]
+  );
 
   async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -187,7 +189,7 @@ export function AccountSettingsModal({ open, onClose }: AccountSettingsModalProp
             <Stack spacing={3.5}>
               {isDemoAccount ? (
                 <Alert severity="info">
-                  The seeded demo account is read-only for profile and password changes. Use Request Platform Access to create a local account for full account-management testing.
+                  Seeded demo accounts are read-only for profile and password changes. Use Request Platform Access to create a local account for full account-management testing.
                 </Alert>
               ) : null}
 
