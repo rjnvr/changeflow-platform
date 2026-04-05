@@ -32,7 +32,7 @@ export function useAuth() {
     let active = true;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
-    if (!token || user) {
+    if (!token) {
       return;
     }
 
@@ -64,7 +64,7 @@ export function useAuth() {
     return () => {
       active = false;
     };
-  }, [user]);
+  }, []);
 
   async function login(email: string, password: string) {
     setLoading(true);

@@ -19,14 +19,11 @@ import { useAuthContext } from "../context/AuthContext";
 const headlineFont = '"Epilogue", "Space Grotesk", sans-serif';
 const bodyFont = '"Inter", "Manrope", sans-serif';
 
-const HERO_IMAGE =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuAn7E0av1NPgNHbGGS-17z5d5LQ1mhOktAYSTrKaqfTmBa8FMU3L6fNjLUFYYnOZRg6ASyWRMpXDSBEFHvjCF6oLMjNW-AtYn4epQPJV2ZUy0SEh25742heFwMJ0hpsQcCil1AHeZqQ2iroT1YHwA6qwqe4sfKh3G-M9TgbvTd7MjuYcDANc1K3m-V7Gcd8bXgjNJGTe2QLPclxJ-3wGGPvyEyI-z7o_HV8Qgtu7aj4TMBy5m4SH-aIv0d-JuZlbxnPU2vmv3NCpjl3";
+const HERO_IMAGE = "/screenshots/projects-overview.png";
 
-const DASHBOARD_IMAGE =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuAGYGccPvRGu-67igfW6weKF94TEmaW0dy4Lm1_ctjRNiircYEXnj5ttKB_PqQg462cfG2sOvQMxEYJE183bfu7PM8M05tgxhULXPVkgBXDp8YVCousbMHhudVIpg5YmfoaPfSVuzRwIzO0V6--lMSeavCs_yoE7aahL0-5JdLuXrfVNkqpaz2S76RSNFY-tLoR6UQJGM0a834FN9Zb-pyGrFQlw5Fhngc3VZvkysqo8K4ylb0-YmrfSYCDNgapfOmT0gzYsXlw2p_U";
+const DASHBOARD_IMAGE = "/screenshots/change-orders-pipeline.png";
 
-const API_IMAGE =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuCqP_bNyFUV4iubm7S8v6_owV1nAz2uo9tLuztU9fpNktj06Tnn_PcO7FNa2rCzoFPVrAOx0A28MvUAPLrSzv4xzWUb4YY6jAMyBufCNNpugmHrW8OSP5byxFAB8S4n_F7q4LqqwQdmd7oabnChqRgNS7xzMoQCiyp8JzuZLe-k82n3wsBMIwN_jup7QT1gE6u2uXglCd5Jqoij3gOj4WfNNJU7bJhFK0QPJ-4MGlM5qrmsei9Tc_VGtje_adtHXu_FeZMzufcsOCzx";
+const API_IMAGE = "/screenshots/api-docs.png";
 
 const navigationItems = [
   { label: "Features", href: "#features" },
@@ -367,16 +364,18 @@ export function HomePage() {
                   <Box
                     component="img"
                     src={HERO_IMAGE}
-                    alt="Construction blueprints and analytics dashboard"
+                    alt="ChangeFlow projects overview screenshot"
                     sx={{
                       display: "block",
                       width: "100%",
                       height: "auto",
                       borderRadius: 3,
-                      filter: "grayscale(100%)",
-                      transition: "filter 500ms ease",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      filter: "saturate(0.92) contrast(1.02)",
+                      transition: "transform 350ms ease, filter 350ms ease",
                       ".MuiPaper-root:hover &": {
-                        filter: "grayscale(0%)"
+                        transform: "scale(1.01)",
+                        filter: "saturate(1) contrast(1.04)"
                       }
                     }}
                   />
@@ -421,7 +420,7 @@ export function HomePage() {
                       $842,500.00
                     </Typography>
                     <Typography sx={{ mt: 0.4, fontFamily: bodyFont, fontSize: "0.78rem", color: "#707975" }}>
-                      Synced to Procore 2m ago
+                      Portfolio and live project health at a glance
                     </Typography>
                   </Paper>
                 </Paper>
@@ -640,8 +639,8 @@ export function HomePage() {
                       color: "#3F4945"
                     }}
                   >
-                    Aggregate data across 500+ projects to identify systemic cost leakage and regional
-                    efficiency trends.
+                    Track review queues, active approvals, and commercial exposure from the same
+                    command surface your PMs use every day.
                   </Typography>
                   <Button
                     variant="text"
@@ -663,7 +662,7 @@ export function HomePage() {
                 <Box
                   component="img"
                   src={DASHBOARD_IMAGE}
-                  alt="Construction analytics dashboard"
+                  alt="ChangeFlow change orders pipeline screenshot"
                   sx={{
                     mt: { xs: 4, md: 0 },
                     width: { xs: "100%", md: "50%" },
@@ -671,6 +670,7 @@ export function HomePage() {
                     right: { md: "-10%" },
                     bottom: { md: "-20%" },
                     borderRadius: 3,
+                    border: "1px solid rgba(7,30,39,0.08)",
                     boxShadow: "0 30px 44px rgba(7,30,39,0.14)"
                   }}
                 />
@@ -774,8 +774,8 @@ export function HomePage() {
                     API First Architecture
                   </Typography>
                   <Typography sx={{ mt: 2, fontFamily: bodyFont, fontSize: "1rem", lineHeight: 1.75, color: "#3F4945" }}>
-                    Build your own workflows or extend ours. ChangeFlow provides a robust GraphQL API
-                    designed for massive scale.
+                    Ship construction workflows on top of a pragmatic JSON API for auth, projects,
+                    change orders, uploads, integration sync, and webhook intake.
                   </Typography>
                   <Box
                     sx={{
@@ -788,19 +788,21 @@ export function HomePage() {
                       backgroundColor: "#004D40"
                     }}
                   >
-                    GET /v1/projects/{"{id}"}/change_orders
+                    POST /api/projects/{"{id}"}/brief
                   </Box>
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "center" }}>
                   <Box
                     component="img"
                     src={API_IMAGE}
-                    alt="Server infrastructure visual"
+                    alt="ChangeFlow API docs screenshot"
                     sx={{
-                      width: 190,
+                      width: 260,
                       maxWidth: "100%",
-                      opacity: 0.52,
-                      filter: "grayscale(100%)"
+                      borderRadius: 2.5,
+                      border: "1px solid rgba(7,30,39,0.08)",
+                      opacity: 0.92,
+                      boxShadow: "0 22px 36px rgba(7,30,39,0.14)"
                     }}
                   />
                 </Box>

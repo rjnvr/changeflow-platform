@@ -1,4 +1,5 @@
 import type {
+  ProjectAccessRequest,
   ProjectAnalyticsBrief,
   Project,
   ProjectDocument,
@@ -12,6 +13,11 @@ import { apiRequest } from "./client";
 export function getProjects(options?: { includeArchived?: boolean }) {
   const query = options?.includeArchived ? "?includeArchived=true" : "";
   return apiRequest<Project[]>(`/projects${query}`);
+}
+
+export function getLockedProjects(options?: { includeArchived?: boolean }) {
+  const query = options?.includeArchived ? "?includeArchived=true" : "";
+  return apiRequest<Project[]>(`/projects/locked${query}`);
 }
 
 export function createProject(input: {
@@ -50,6 +56,29 @@ export function getProject(projectId: string) {
 
 export function generateProjectBrief(projectId: string) {
   return apiRequest<ProjectAnalyticsBrief>(`/projects/${projectId}/brief`, {
+    method: "POST"
+  });
+}
+
+export function requestProjectAccess(projectId: string, input?: { message?: string }) {
+  return apiRequest<ProjectAccessRequest>(`/projects/${projectId}/access-requests`, {
+    method: "POST",
+    body: JSON.stringify(input ?? {})
+  });
+}
+
+export function getProjectAccessRequests() {
+  return apiRequest<ProjectAccessRequest[]>("/projects/access-requests");
+}
+
+export function approveProjectAccessRequest(requestId: string) {
+  return apiRequest<ProjectAccessRequest>(`/projects/access-requests/${requestId}/approve`, {
+    method: "POST"
+  });
+}
+
+export function rejectProjectAccessRequest(requestId: string) {
+  return apiRequest<ProjectAccessRequest>(`/projects/access-requests/${requestId}/reject`, {
     method: "POST"
   });
 }

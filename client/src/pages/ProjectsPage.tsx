@@ -3,6 +3,7 @@ import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CalendarTodayRoundedIcon from "@mui/icons-material/CalendarTodayRounded";
 import FavoriteRoundedIcon from "@mui/icons-material/FavoriteRounded";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
+import LockRoundedIcon from "@mui/icons-material/LockRounded";
 import LocationOnRoundedIcon from "@mui/icons-material/LocationOnRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
@@ -18,6 +19,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { BulkProjectActionsModal } from "../components/projects/BulkProjectActionsModal";
 import { CreateProjectModal } from "../components/projects/CreateProjectModal";
+import { getLockedProjects, requestProjectAccess } from "../api/projects";
 import { useAuthContext } from "../context/AuthContext";
 import { useProjects } from "../hooks/useProjects";
 import type { Project } from "../types/project";
@@ -245,8 +247,36 @@ export function ProjectsPage() {
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [lockedProjects, setLockedProjects] = useState<Project[]>([]);
+  const [lockedProjectsLoading, setLockedProjectsLoading] = useState(false);
+  const [lockedProjectsError, setLockedProjectsError] = useState<string | null>(null);
+  const [requestingProjectId, setRequestingProjectId] = useState<string | null>(null);
   const pageSize = 10;
   const searchQuery = searchParams.get("search")?.trim().toLowerCase() ?? "";
+  const canCreateProjects = Boolean(user && (user.role === "admin" || projects.some((project) => project.ownerId === user.id)));
+
+  async function refreshLockedProjects() {
+    if (!user || user.role === "admin") {
+      setLockedProjects([]);
+      setLockedProjectsError(null);
+      return [];
+    }
+
+    setLockedProjectsLoading(true);
+    setLockedProjectsError(null);
+
+    try {
+      const items = await getLockedProjects();
+      setLockedProjects(items);
+      return items;
+    } catch (requestError) {
+      const nextError = requestError instanceof Error ? requestError.message : "Unable to load locked projects.";
+      setLockedProjectsError(nextError);
+      return [];
+    } finally {
+      setLockedProjectsLoading(false);
+    }
+  }
 
   const filteredProjects = useMemo(
     () =>
@@ -266,6 +296,21 @@ export function ProjectsPage() {
         );
       }),
     [projects, searchQuery]
+  );
+  const filteredLockedProjects = useMemo(
+    () =>
+      lockedProjects.filter((project) => {
+        if (!searchQuery) {
+          return true;
+        }
+
+        return (
+          project.name.toLowerCase().includes(searchQuery) ||
+          project.code.toLowerCase().includes(searchQuery) ||
+          project.location.toLowerCase().includes(searchQuery)
+        );
+      }),
+    [lockedProjects, searchQuery]
   );
 
   const featured = useMemo(() => featuredProjects(filteredProjects), [filteredProjects]);
@@ -295,6 +340,10 @@ export function ProjectsPage() {
       return next;
     });
   }, [filteredProjects]);
+
+  useEffect(() => {
+    void refreshLockedProjects();
+  }, [user?.id, user?.role]);
 
   function exportProjectsCsv() {
     const rows = projects.map((project) => {
@@ -347,6 +396,20 @@ export function ProjectsPage() {
 
       return [...new Set([...current, ...pageProjectIds])];
     });
+  }
+
+  async function handleRequestAccess(projectId: string) {
+    setRequestingProjectId(projectId);
+
+    try {
+      await requestProjectAccess(projectId);
+      await refreshLockedProjects();
+      setMessage("Access request sent to the admin team.");
+    } catch (requestError) {
+      setMessage(requestError instanceof Error ? requestError.message : "Unable to request access right now.");
+    } finally {
+      setRequestingProjectId(null);
+    }
   }
 
   return (
@@ -433,22 +496,24 @@ export function ProjectsPage() {
               <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>Q1 2026</Typography>
             </Stack>
           </Paper>
-          <ButtonBase
-            onClick={() => setCreateProjectOpen(true)}
-            sx={{
-              px: 2.2,
-              py: 1.4,
-              borderRadius: 2.5,
-              backgroundColor: "#00342B",
-              color: "#FFFFFF",
-              boxShadow: "0 12px 24px rgba(7,30,39,0.08)"
-            }}
-          >
-            <Stack direction="row" spacing={1.1} alignItems="center">
-              <AddRoundedIcon sx={{ fontSize: 20 }} />
-              <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>New Project</Typography>
-            </Stack>
-          </ButtonBase>
+          {canCreateProjects ? (
+            <ButtonBase
+              onClick={() => setCreateProjectOpen(true)}
+              sx={{
+                px: 2.2,
+                py: 1.4,
+                borderRadius: 2.5,
+                backgroundColor: "#00342B",
+                color: "#FFFFFF",
+                boxShadow: "0 12px 24px rgba(7,30,39,0.08)"
+              }}
+            >
+              <Stack direction="row" spacing={1.1} alignItems="center">
+                <AddRoundedIcon sx={{ fontSize: 20 }} />
+                <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>New Project</Typography>
+              </Stack>
+            </ButtonBase>
+          ) : null}
         </Stack>
       </Box>
 
@@ -811,6 +876,125 @@ export function ProjectsPage() {
           </Box>
         </Box>
       </Paper>
+
+      {user && user.role !== "admin" ? (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3.4,
+            borderRadius: 5,
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+          }}
+        >
+          <Stack spacing={2.5}>
+            <Box>
+              <Typography
+                sx={{
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "1.9rem",
+                  fontWeight: 800,
+                  letterSpacing: -1,
+                  color: "#00342B"
+                }}
+              >
+                Locked Projects
+              </Typography>
+              <Typography sx={{ mt: 0.8, maxWidth: 720, fontSize: "1rem", lineHeight: 1.65, color: "#5A6A84" }}>
+                You can only open projects you own, are assigned to, or have been granted access to. Request unlocks here and the admin can approve them for your workspace.
+              </Typography>
+            </Box>
+
+            {lockedProjectsError ? <Alert severity="warning">{lockedProjectsError}</Alert> : null}
+
+            {lockedProjectsLoading ? (
+              <Typography sx={{ fontSize: "0.96rem", color: "#5A6A84" }}>Loading locked projects...</Typography>
+            ) : filteredLockedProjects.length > 0 ? (
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" },
+                  gap: 2
+                }}
+              >
+                {filteredLockedProjects.map((project) => {
+                  const statusLabel =
+                    project.accessRequestStatus === "pending"
+                      ? "Pending Review"
+                      : project.accessRequestStatus === "rejected"
+                        ? "Request Again"
+                        : "Request Access";
+
+                  return (
+                    <Paper
+                      key={`locked-${project.id}`}
+                      elevation={0}
+                      sx={{
+                        p: 2.6,
+                        borderRadius: 3.5,
+                        backgroundColor: "#F8FCFF",
+                        border: "1px dashed rgba(147,166,195,0.6)"
+                      }}
+                    >
+                      <Stack spacing={2}>
+                        <Stack direction="row" justifyContent="space-between" spacing={2} alignItems="flex-start">
+                          <Box>
+                            <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                              {project.name}
+                            </Typography>
+                            <Typography sx={{ mt: 0.5, fontSize: "0.9rem", color: "#5A6A84" }}>
+                              {project.location} • {project.code}
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ color: "#5A6A84" }}>
+                            <LockRoundedIcon sx={{ fontSize: 18 }} />
+                            <Typography sx={{ fontSize: "0.8rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                              Locked
+                            </Typography>
+                          </Stack>
+                        </Stack>
+
+                        <Typography sx={{ fontSize: "0.92rem", lineHeight: 1.65, color: "#5A6A84" }}>
+                          {project.accessRequestStatus === "pending"
+                            ? "Your access request is waiting for admin review."
+                            : project.accessRequestStatus === "rejected"
+                              ? "Your last request was rejected. You can request access again."
+                              : "Request admin approval to unlock this project in your portfolio."}
+                        </Typography>
+
+                        <ButtonBase
+                          disabled={project.accessRequestStatus === "pending" || requestingProjectId === project.id}
+                          onClick={() => {
+                            void handleRequestAccess(project.id);
+                          }}
+                          sx={{
+                            alignSelf: "flex-start",
+                            px: 2,
+                            py: 1.15,
+                            borderRadius: 2.2,
+                            backgroundColor:
+                              project.accessRequestStatus === "pending" ? "#D5ECF8" : "#00342B",
+                            color: project.accessRequestStatus === "pending" ? "#5A6A84" : "#FFFFFF",
+                            opacity: requestingProjectId === project.id ? 0.72 : 1
+                          }}
+                        >
+                          <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>
+                            {requestingProjectId === project.id ? "Sending..." : statusLabel}
+                          </Typography>
+                        </ButtonBase>
+                      </Stack>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            ) : (
+              <Typography sx={{ fontSize: "0.96rem", color: "#5A6A84" }}>
+                No locked projects match the current view.
+              </Typography>
+            )}
+          </Stack>
+        </Paper>
+      ) : null}
 
       <BulkProjectActionsModal
         open={bulkModalOpen}

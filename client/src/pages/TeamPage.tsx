@@ -19,12 +19,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { applyBriefQuotaToAll, getBriefQuotaDashboard, updateUserBriefQuota } from "../api/auth";
+import {
+  approveProjectAccessRequest,
+  getProjectAccessRequests,
+  rejectProjectAccessRequest
+} from "../api/projects";
 import { AddTeamMemberModal } from "../components/projects/AddTeamMemberModal";
 import { WorkspaceFooter } from "../components/layout/WorkspaceFooter";
 import { useAuthContext } from "../context/AuthContext";
 import { useFeedbackContext } from "../context/FeedbackContext";
 import { useProjectTeamDirectory } from "../hooks/useProjectTeamDirectory";
 import { useProjects } from "../hooks/useProjects";
+import type { ProjectAccessRequest } from "../types/project";
 import type { BriefQuotaDashboard } from "../types/auth";
 import { formatDate } from "../utils/formatDate";
 
@@ -57,6 +63,10 @@ export function TeamPage() {
   const [quotaDrafts, setQuotaDrafts] = useState<Record<string, string>>({});
   const [teamQuotaDraft, setTeamQuotaDraft] = useState("3");
   const [expandedQuotaProjectIds, setExpandedQuotaProjectIds] = useState<string[]>([]);
+  const [projectAccessRequests, setProjectAccessRequests] = useState<ProjectAccessRequest[]>([]);
+  const [projectAccessRequestsLoading, setProjectAccessRequestsLoading] = useState(false);
+  const [projectAccessRequestsError, setProjectAccessRequestsError] = useState("");
+  const [handlingProjectAccessRequestId, setHandlingProjectAccessRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.role !== "admin") {
@@ -73,6 +83,27 @@ export function TeamPage() {
       })
       .catch((requestError) => {
         setQuotaError(requestError instanceof Error ? requestError.message : "Unable to load brief quotas.");
+      });
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== "admin") {
+      return;
+    }
+
+    setProjectAccessRequestsLoading(true);
+    setProjectAccessRequestsError("");
+    getProjectAccessRequests()
+      .then((requests) => {
+        setProjectAccessRequests(requests);
+      })
+      .catch((requestError) => {
+        setProjectAccessRequestsError(
+          requestError instanceof Error ? requestError.message : "Unable to load project access requests."
+        );
+      })
+      .finally(() => {
+        setProjectAccessRequestsLoading(false);
       });
   }, [user?.role]);
 
@@ -219,6 +250,11 @@ export function TeamPage() {
     setQuotaDrafts(
       Object.fromEntries(refreshedDashboard.users.map((quotaUser) => [quotaUser.id, String(quotaUser.dailyProjectBriefLimit)]))
     );
+  }
+
+  async function refreshProjectAccessRequests() {
+    const requests = await getProjectAccessRequests();
+    setProjectAccessRequests(requests);
   }
 
   async function handleSaveQuota(quotaUserId: string) {
@@ -442,6 +478,176 @@ export function TeamPage() {
           </Stack>
         </Stack>
       </Paper>
+
+      {user?.role === "admin" ? (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3.2,
+            borderRadius: 4,
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+          }}
+        >
+          <Stack spacing={2.4}>
+            <Box>
+              <Typography
+                sx={{
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "1.9rem",
+                  fontWeight: 800,
+                  letterSpacing: -1,
+                  color: "#00342B"
+                }}
+              >
+                Project Access Requests
+              </Typography>
+              <Typography sx={{ mt: 0.9, fontSize: "1rem", color: "#5A6A84", lineHeight: 1.65 }}>
+                Review locked-project access requests from team members and unlock projects for the right people.
+              </Typography>
+            </Box>
+
+            {projectAccessRequestsError ? <Alert severity="warning">{projectAccessRequestsError}</Alert> : null}
+
+            {projectAccessRequestsLoading ? (
+              <Typography sx={{ fontSize: "0.96rem", color: "#5A6A84" }}>
+                Loading project access requests...
+              </Typography>
+            ) : projectAccessRequests.length > 0 ? (
+              <Stack spacing={1.4}>
+                {projectAccessRequests.map((request) => (
+                  <Paper
+                    key={request.id}
+                    elevation={0}
+                    sx={{
+                      p: 2.4,
+                      borderRadius: 3,
+                      backgroundColor: "#F8FCFF",
+                      border: "1px solid rgba(213,236,248,0.92)"
+                    }}
+                  >
+                    <Stack spacing={1.8}>
+                      <Stack
+                        direction={{ xs: "column", lg: "row" }}
+                        justifyContent="space-between"
+                        alignItems={{ xs: "flex-start", lg: "center" }}
+                        gap={2}
+                      >
+                        <Box>
+                          <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                            {request.userName}
+                          </Typography>
+                          <Typography sx={{ mt: 0.35, fontSize: "0.88rem", color: "#5A6A84" }}>
+                            {request.userEmail} • requested {formatDate(request.createdAt)}
+                          </Typography>
+                        </Box>
+
+                        <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
+                          <ButtonBase
+                            onClick={() => {
+                              setHandlingProjectAccessRequestId(request.id);
+                              void approveProjectAccessRequest(request.id)
+                                .then(async () => {
+                                  await refreshProjectAccessRequests();
+                                  showToast({
+                                    message: `Granted ${request.userName} access to ${request.projectName}.`,
+                                    severity: "success"
+                                  });
+                                })
+                                .catch((requestError) => {
+                                  setProjectAccessRequestsError(
+                                    requestError instanceof Error
+                                      ? requestError.message
+                                      : "Unable to approve access request."
+                                  );
+                                })
+                                .finally(() => {
+                                  setHandlingProjectAccessRequestId(null);
+                                });
+                            }}
+                            sx={{
+                              px: 2,
+                              py: 1.1,
+                              borderRadius: 2.1,
+                              backgroundColor: "#00342B",
+                              color: "#FFFFFF",
+                              opacity: handlingProjectAccessRequestId === request.id ? 0.7 : 1
+                            }}
+                          >
+                            <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>
+                              {handlingProjectAccessRequestId === request.id ? "Saving..." : "Approve"}
+                            </Typography>
+                          </ButtonBase>
+                          <ButtonBase
+                            onClick={() => {
+                              setHandlingProjectAccessRequestId(request.id);
+                              void rejectProjectAccessRequest(request.id)
+                                .then(async () => {
+                                  await refreshProjectAccessRequests();
+                                  showToast({
+                                    message: `Rejected access request for ${request.projectName}.`,
+                                    severity: "info"
+                                  });
+                                })
+                                .catch((requestError) => {
+                                  setProjectAccessRequestsError(
+                                    requestError instanceof Error
+                                      ? requestError.message
+                                      : "Unable to reject access request."
+                                  );
+                                })
+                                .finally(() => {
+                                  setHandlingProjectAccessRequestId(null);
+                                });
+                            }}
+                            sx={{
+                              px: 2,
+                              py: 1.1,
+                              borderRadius: 2.1,
+                              backgroundColor: "#E6F6FF",
+                              color: "#00342B",
+                              opacity: handlingProjectAccessRequestId === request.id ? 0.7 : 1
+                            }}
+                          >
+                            <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>Reject</Typography>
+                          </ButtonBase>
+                        </Stack>
+                      </Stack>
+
+                      <Box>
+                        <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.6, textTransform: "uppercase", color: "#93A6C3" }}>
+                          Requested Project
+                        </Typography>
+                        <Typography sx={{ mt: 0.55, fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
+                          {request.projectName}
+                        </Typography>
+                        <Typography sx={{ mt: 0.3, fontSize: "0.88rem", color: "#5A6A84" }}>
+                          {request.projectLocation} • {request.projectCode}
+                        </Typography>
+                      </Box>
+
+                      {request.message ? (
+                        <Box>
+                          <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.6, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Request Note
+                          </Typography>
+                          <Typography sx={{ mt: 0.55, fontSize: "0.92rem", lineHeight: 1.65, color: "#42536D" }}>
+                            {request.message}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
+            ) : (
+              <Typography sx={{ fontSize: "0.96rem", color: "#5A6A84" }}>
+                No pending project access requests right now.
+              </Typography>
+            )}
+          </Stack>
+        </Paper>
+      ) : null}
 
       {user?.role === "admin" ? (
         <Paper

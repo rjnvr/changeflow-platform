@@ -44,6 +44,10 @@ model User {
   role                   UserRole
   dailyProjectBriefLimit Int          @default(3)
   projects               Project[]
+  projectAccesses        ProjectAccess[]        @relation("ProjectAccessUser")
+  grantedProjectAccesses ProjectAccess[]        @relation("ProjectAccessGrantedBy")
+  projectAccessRequests  ProjectAccessRequest[] @relation("ProjectAccessRequestUser")
+  handledProjectAccessRequests ProjectAccessRequest[] @relation("ProjectAccessRequestHandledBy")
   projectBriefGenerations ProjectBriefGeneration[]
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
@@ -62,9 +66,40 @@ model Project {
   changeOrders  ChangeOrder[]
   teamMembers   ProjectTeamMember[]
   documents     ProjectDocument[]
+  accessGrants  ProjectAccess[]
+  accessRequests ProjectAccessRequest[]
   projectBriefGenerations ProjectBriefGeneration[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model ProjectAccess {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String
+  grantedById String?
+  user        User     @relation("ProjectAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  grantedBy   User?    @relation("ProjectAccessGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, projectId])
+}
+
+model ProjectAccessRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String
+  status      String   @default("pending")
+  message     String?
+  handledById String?
+  handledAt   DateTime?
+  user        User     @relation("ProjectAccessRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  handledBy   User?    @relation("ProjectAccessRequestHandledBy", fields: [handledById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ProjectTeamMember {

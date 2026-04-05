@@ -110,6 +110,54 @@ Key frontend areas:
 - Resources Hub
 - Dedicated API Docs page
 
+## Screenshots
+
+### Login and Account Management
+
+![ChangeFlow login page](./Screenshots/Login%20Page.png)
+
+![ChangeFlow account settings](./Screenshots/Account%20Settings.png)
+
+### Operations Center
+
+![ChangeFlow dashboard](./Screenshots/Dashboard.png)
+
+![ChangeFlow system health](./Screenshots/System%20Health.png)
+
+### Projects Portfolio
+
+![ChangeFlow projects overview](./Screenshots/Projects%20Overview.png)
+
+![ChangeFlow projects inventory](./Screenshots/Projects%20Inventory.png)
+
+![ChangeFlow project details](./Screenshots/Project%20In%20Detail.png)
+
+![ChangeFlow project analytics brief](./Screenshots/Project%20Analytics%20Brief.png)
+
+![ChangeFlow project brief quotas](./Screenshots/Project%20Breif%20Quotas.png)
+
+![ChangeFlow team coverage](./Screenshots/Team%20Coverage.png)
+
+### Change Orders Workflow
+
+![ChangeFlow change orders pipeline](./Screenshots/Change%20Orders%20Pipeline.png)
+
+![ChangeFlow create new change order](./Screenshots/Create%20New%20Change%20Order.png)
+
+![ChangeFlow change order details](./Screenshots/Change%20Order%20Details.png)
+
+### Additional Features
+
+![ChangeFlow budget command](./Screenshots/Budget%20Command.png)
+
+![ChangeFlow schedule board](./Screenshots/Schedule%20Board.png)
+
+![ChangeFlow document vault](./Screenshots/Document%20Vault.png)
+
+### API Documentation
+
+![ChangeFlow API docs](./Screenshots/API%20doc%20page.png)
+
 ## Demo Credentials
 
 Use the seeded demo account to explore the app quickly:
@@ -212,7 +260,7 @@ Built a fullstack construction workflow SaaS for managing project portfolios, ch
 
 This project is feature-rich and demo-ready. The best remaining work is presentation and deployment polish:
 
-- improve README visuals with screenshots or a short demo GIF
+- ✅ improve README visuals with screenshots
 - add a few smoke tests
 - deploy the app
 - optionally connect more external providers

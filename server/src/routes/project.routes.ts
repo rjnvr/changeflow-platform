@@ -6,6 +6,7 @@ import { validate } from "../middleware/validate.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   bulkUpdateProjectStatusSchema,
+  createProjectAccessRequestSchema,
   createProjectDocumentSchema,
   createProjectDocumentUploadIntentSchema,
   createProjectSchema,
@@ -19,6 +20,8 @@ export const projectRouter = Router();
 
 projectRouter.use(authMiddleware);
 projectRouter.get("/", asyncHandler(projectController.list));
+projectRouter.get("/locked", asyncHandler(projectController.listLocked));
+projectRouter.get("/access-requests", asyncHandler(projectController.listAccessRequests));
 projectRouter.get("/team-members", asyncHandler(projectController.listTeamDirectory));
 projectRouter.patch(
   "/status",
@@ -27,7 +30,20 @@ projectRouter.patch(
 );
 projectRouter.post("/:projectId/brief", asyncHandler(projectController.generateBrief));
 projectRouter.post("/:projectId/archive", asyncHandler(projectController.archive));
+projectRouter.post(
+  "/:projectId/access-requests",
+  validate(createProjectAccessRequestSchema),
+  asyncHandler(projectController.requestAccess)
+);
 projectRouter.patch("/:projectId", validate(updateProjectSchema), asyncHandler(projectController.update));
+projectRouter.post(
+  "/access-requests/:requestId/approve",
+  asyncHandler(projectController.approveAccessRequest)
+);
+projectRouter.post(
+  "/access-requests/:requestId/reject",
+  asyncHandler(projectController.rejectAccessRequest)
+);
 projectRouter.get("/:projectId", asyncHandler(projectController.get));
 projectRouter.get("/:projectId/team", asyncHandler(projectController.listTeamMembers));
 projectRouter.get("/:projectId/documents", asyncHandler(projectController.listDocuments));

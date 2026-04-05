@@ -98,45 +98,57 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       }}
     >
       <Box sx={{ mb: 4.5 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 2.5,
-              display: "grid",
-              placeItems: "center",
-              backgroundColor: "#00342B",
-              color: "common.white"
-            }}
-          >
-            <ArchitectureRoundedIcon />
-          </Box>
-          <Box>
-            <Typography
+        <ButtonBase
+          onClick={() => navigateShell("/")}
+          sx={{
+            display: "inline-flex",
+            borderRadius: 3,
+            textAlign: "left",
+            "&:hover": {
+              transform: "translateX(2px)"
+            }
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
               sx={{
-                fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                fontSize: "1.25rem",
-                fontWeight: 700,
-                letterSpacing: -0.8,
-                color: "#00342B"
+                width: 40,
+                height: 40,
+                borderRadius: 2.5,
+                display: "grid",
+                placeItems: "center",
+                backgroundColor: "#00342B",
+                color: "common.white"
               }}
             >
-              ChangeFlow
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: "0.62rem",
-                fontWeight: 800,
-                letterSpacing: 2.2,
-                textTransform: "uppercase",
-                color: "#046B5E"
-              }}
-            >
-              Intelligence
-            </Typography>
-          </Box>
-        </Stack>
+              <ArchitectureRoundedIcon />
+            </Box>
+            <Box>
+              <Typography
+                sx={{
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "1.25rem",
+                  fontWeight: 700,
+                  letterSpacing: -0.8,
+                  color: "#00342B"
+                }}
+              >
+                ChangeFlow
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: "0.62rem",
+                  fontWeight: 800,
+                  letterSpacing: 2.2,
+                  textTransform: "uppercase",
+                  color: "#046B5E"
+                }}
+              >
+                Intelligence
+              </Typography>
+            </Box>
+          </Stack>
+        </ButtonBase>
       </Box>
 
       <Box

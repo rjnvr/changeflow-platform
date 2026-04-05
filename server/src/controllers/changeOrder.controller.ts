@@ -14,7 +14,7 @@ export const changeOrderController = {
   async list(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await changeOrderService.listChangeOrders(request.query.projectId as string | undefined, {
+      data: await changeOrderService.listChangeOrders(request.user!, request.query.projectId as string | undefined, {
         includeArchived: request.query.includeArchived === "true"
       })
     });
@@ -22,13 +22,13 @@ export const changeOrderController = {
   async create(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await changeOrderService.createChangeOrder(request.body)
+      data: await changeOrderService.createChangeOrder(request.user!, request.body)
     });
   },
   async get(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await changeOrderService.getChangeOrder(getRouteParam(request.params.changeOrderId))
+      data: await changeOrderService.getChangeOrder(request.user!, getRouteParam(request.params.changeOrderId))
     });
   },
   async update(request: Request, response: Response) {
@@ -46,25 +46,25 @@ export const changeOrderController = {
   async listComments(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await changeOrderService.listComments(getRouteParam(request.params.changeOrderId))
+      data: await changeOrderService.listComments(request.user!, getRouteParam(request.params.changeOrderId))
     });
   },
   async addComment(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await changeOrderService.addComment(getRouteParam(request.params.changeOrderId), request.body)
+      data: await changeOrderService.addComment(request.user!, getRouteParam(request.params.changeOrderId), request.body)
     });
   },
   async listActivity(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await changeOrderService.listActivity(getRouteParam(request.params.changeOrderId))
+      data: await changeOrderService.listActivity(request.user!, getRouteParam(request.params.changeOrderId))
     });
   },
   async createAttachmentUploadIntent(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await changeOrderService.createAttachmentUploadIntent(request.body)
+      data: await changeOrderService.createAttachmentUploadIntent(request.user!, request.body)
     });
   },
   async addAttachments(request: Request, response: Response) {
@@ -81,6 +81,7 @@ export const changeOrderController = {
     response.json({
       success: true,
       data: await changeOrderService.getAttachmentDownloadUrl(
+        request.user!,
         getRouteParam(request.params.changeOrderId),
         getRouteParam(request.params.attachmentId)
       )
@@ -99,7 +100,7 @@ export const changeOrderController = {
   async import(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await changeOrderService.importChangeOrders(request.body.changeOrders)
+      data: await changeOrderService.importChangeOrders(request.user!, request.body.changeOrders)
     });
   },
   async updateStatus(request: Request, response: Response) {

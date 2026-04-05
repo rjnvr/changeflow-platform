@@ -4,9 +4,12 @@ import { projectTeamMemberRepository } from "../repositories/projectTeamMember.r
 import type { AuthenticatedUser } from "../types/domain.js";
 import { ApiError } from "../utils/apiError.js";
 import { changeOrderRepository } from "../repositories/changeOrder.repository.js";
+import { projectAccessRepository } from "../repositories/projectAccess.repository.js";
+import { projectAccessRequestRepository } from "../repositories/projectAccessRequest.repository.js";
 import { projectBriefGenerationRepository } from "../repositories/projectBriefGeneration.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { auditLogService } from "./auditLog.service.js";
+import { projectAccessService } from "./projectAccess.service.js";
 import { aiSummaryService } from "./aiSummary.service.js";
 import { storageService } from "./storage.service.js";
 
@@ -83,27 +86,36 @@ function autoAssignDocumentToTeamMember(
 }
 
 export const projectService = {
-  async listProjects(options?: { includeArchived?: boolean }) {
-    return projectRepository.list(options);
+  async listProjects(requestUser: AuthenticatedUser, options?: { includeArchived?: boolean }) {
+    const { accessibleProjects } = await projectAccessService.listProjectAccessState(requestUser, options);
+    return accessibleProjects;
   },
-  async getProject(projectId: string) {
-    const project = await projectRepository.findById(projectId);
-
-    if (!project) {
-      throw new ApiError(404, "Project not found.");
-    }
-
-    return project;
+  async listLockedProjects(requestUser: AuthenticatedUser, options?: { includeArchived?: boolean }) {
+    const { lockedProjects } = await projectAccessService.listProjectAccessState(requestUser, options);
+    return lockedProjects;
   },
-  async listTeamMembers(projectId: string) {
-    await this.getProject(projectId);
+  async getProject(requestUser: AuthenticatedUser, projectId: string) {
+    return projectAccessService.requireProjectAccess(requestUser, projectId);
+  },
+  async listTeamMembers(requestUser: AuthenticatedUser, projectId: string) {
+    await this.getProject(requestUser, projectId);
     return projectTeamMemberRepository.listByProject(projectId);
   },
-  async listTeamDirectory() {
-    return projectTeamMemberRepository.listDirectory();
+  async listTeamDirectory(requestUser: AuthenticatedUser) {
+    const entries = await projectTeamMemberRepository.listDirectory();
+
+    if (requestUser.role === "admin") {
+      return entries;
+    }
+
+    const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {
+      includeArchived: true
+    });
+
+    return entries.filter((entry) => accessibleProjectIds.includes(entry.projectId));
   },
   async generateProjectBrief(projectId: string, requestUser: AuthenticatedUser) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(requestUser, projectId);
     const user = await userRepository.findById(requestUser.id);
 
     if (!user) {
@@ -154,11 +166,15 @@ export const projectService = {
 
     return brief;
   },
-  async addTeamMember(projectId: string, input: { name: string; role: string }) {
-    const project = await this.getProject(projectId);
+  async addTeamMember(user: AuthenticatedUser, projectId: string, input: { name: string; role: string }) {
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
+    }
+
+    if (!canEditProject(user, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner can add team members.");
     }
 
     const member = await projectTeamMemberRepository.create({
@@ -181,7 +197,7 @@ export const projectService = {
     teamMemberId: string,
     input: { name: string; role: string }
   ) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -209,7 +225,7 @@ export const projectService = {
     return updatedMember;
   },
   async removeTeamMember(user: AuthenticatedUser, projectId: string, teamMemberId: string) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -232,11 +248,12 @@ export const projectService = {
 
     return deletedMember;
   },
-  async listDocuments(projectId: string) {
-    await this.getProject(projectId);
+  async listDocuments(requestUser: AuthenticatedUser, projectId: string) {
+    await this.getProject(requestUser, projectId);
     return projectDocumentRepository.listByProject(projectId);
   },
   async addDocument(
+    user: AuthenticatedUser,
     projectId: string,
     input: {
       title: string;
@@ -250,10 +267,14 @@ export const projectService = {
       fileSize?: number;
     }
   ) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
+    }
+
+    if (!canEditProject(user, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner can add documents.");
     }
 
     const teamMembers = await projectTeamMemberRepository.listByProject(projectId);
@@ -293,7 +314,7 @@ export const projectService = {
       url?: string;
     }
   ) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -328,7 +349,7 @@ export const projectService = {
     return updatedDocument;
   },
   async removeDocument(user: AuthenticatedUser, projectId: string, documentId: string) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -356,6 +377,7 @@ export const projectService = {
     return deletedDocument;
   },
   async createDocumentUploadIntent(
+    user: AuthenticatedUser,
     projectId: string,
     input: {
       fileName: string;
@@ -363,10 +385,14 @@ export const projectService = {
       fileSize: number;
     }
   ) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
+    }
+
+    if (!canEditProject(user, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner can upload documents.");
     }
 
     return storageService.createProjectDocumentUploadIntent({
@@ -376,8 +402,8 @@ export const projectService = {
       fileSize: input.fileSize
     });
   },
-  async getDocumentDownloadUrl(projectId: string, documentId: string) {
-    await this.getProject(projectId);
+  async getDocumentDownloadUrl(user: AuthenticatedUser, projectId: string, documentId: string) {
+    await this.getProject(user, projectId);
 
     const document = await projectDocumentRepository.findById(projectId, documentId);
 
@@ -464,7 +490,7 @@ export const projectService = {
       contractValue: number;
     }
   ) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -497,7 +523,7 @@ export const projectService = {
     return updatedProject;
   },
   async archiveProject(user: AuthenticatedUser, projectId: string) {
-    const project = await this.getProject(projectId);
+    const project = await this.getProject(user, projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Project is already archived.");
@@ -514,5 +540,105 @@ export const projectService = {
     });
 
     return archivedProject;
+  },
+  async requestProjectAccess(
+    user: AuthenticatedUser,
+    projectId: string,
+    input?: {
+      message?: string;
+    }
+  ) {
+    const project = await projectRepository.findById(projectId);
+
+    if (!project) {
+      throw new ApiError(404, "Project not found.");
+    }
+
+    if (user.role === "admin" || project.ownerId === user.id) {
+      throw new ApiError(400, "You already have access to this project.");
+    }
+
+    const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(user, { includeArchived: true });
+
+    if (accessibleProjectIds.includes(projectId)) {
+      throw new ApiError(400, "You already have access to this project.");
+    }
+
+    const existingPendingRequest = await projectAccessRequestRepository.findPendingByUserAndProject(user.id, projectId);
+
+    if (existingPendingRequest) {
+      return existingPendingRequest;
+    }
+
+    const createdRequest = await projectAccessRequestRepository.create({
+      userId: user.id,
+      projectId,
+      message: input?.message
+    });
+
+    if (!createdRequest) {
+      throw new ApiError(500, "Unable to create the access request.");
+    }
+
+    await auditLogService.record("project.access_request.created", "project", projectId, {
+      userId: user.id
+    });
+
+    return createdRequest;
+  },
+  async listProjectAccessRequests(user: AuthenticatedUser) {
+    if (user.role !== "admin") {
+      throw new ApiError(403, "Only admins can review project access requests.");
+    }
+
+    return projectAccessRequestRepository.listPending();
+  },
+  async approveProjectAccessRequest(user: AuthenticatedUser, requestId: string) {
+    if (user.role !== "admin") {
+      throw new ApiError(403, "Only admins can approve project access requests.");
+    }
+
+    const updatedRequest = await projectAccessRequestRepository.updateStatus(requestId, {
+      status: "approved",
+      handledById: user.id
+    });
+
+    if (!updatedRequest) {
+      throw new ApiError(404, "Access request not found.");
+    }
+
+    await projectAccessRepository.grantAccess({
+      userId: updatedRequest.userId,
+      projectId: updatedRequest.projectId,
+      grantedById: user.id
+    });
+
+    await auditLogService.record("project.access_request.approved", "project", updatedRequest.projectId, {
+      requestId: updatedRequest.id,
+      userId: updatedRequest.userId
+    });
+
+    return updatedRequest;
+  },
+  async rejectProjectAccessRequest(user: AuthenticatedUser, requestId: string) {
+    if (user.role !== "admin") {
+      throw new ApiError(403, "Only admins can reject project access requests.");
+    }
+
+    const updatedRequest = await projectAccessRequestRepository.updateStatus(requestId, {
+      status: "rejected",
+      handledById: user.id
+    });
+
+    if (!updatedRequest) {
+      throw new ApiError(404, "Access request not found.");
+    }
+
+    await auditLogService.record("project.access_request.rejected", "project", updatedRequest.projectId, {
+      requestId: updatedRequest.id,
+      userId: updatedRequest.userId
+    });
+
+    return updatedRequest;
   }
 };

@@ -14,27 +14,35 @@ export const projectController = {
   async list(_request: Request, response: Response) {
     response.json({
       success: true,
-      data: await projectService.listProjects({
+      data: await projectService.listProjects(_request.user!, {
         includeArchived: _request.query.includeArchived === "true"
+      })
+    });
+  },
+  async listLocked(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.listLockedProjects(request.user!, {
+        includeArchived: request.query.includeArchived === "true"
       })
     });
   },
   async get(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await projectService.getProject(getRouteParam(request.params.projectId))
+      data: await projectService.getProject(request.user!, getRouteParam(request.params.projectId))
     });
   },
   async listTeamMembers(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await projectService.listTeamMembers(getRouteParam(request.params.projectId))
+      data: await projectService.listTeamMembers(request.user!, getRouteParam(request.params.projectId))
     });
   },
-  async listTeamDirectory(_request: Request, response: Response) {
+  async listTeamDirectory(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await projectService.listTeamDirectory()
+      data: await projectService.listTeamDirectory(request.user!)
     });
   },
   async generateBrief(request: Request, response: Response) {
@@ -46,7 +54,7 @@ export const projectController = {
   async addTeamMember(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await projectService.addTeamMember(getRouteParam(request.params.projectId), request.body)
+      data: await projectService.addTeamMember(request.user!, getRouteParam(request.params.projectId), request.body)
     });
   },
   async updateTeamMember(request: Request, response: Response) {
@@ -73,13 +81,13 @@ export const projectController = {
   async listDocuments(request: Request, response: Response) {
     response.json({
       success: true,
-      data: await projectService.listDocuments(getRouteParam(request.params.projectId))
+      data: await projectService.listDocuments(request.user!, getRouteParam(request.params.projectId))
     });
   },
   async addDocument(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await projectService.addDocument(getRouteParam(request.params.projectId), request.body)
+      data: await projectService.addDocument(request.user!, getRouteParam(request.params.projectId), request.body)
     });
   },
   async updateDocument(request: Request, response: Response) {
@@ -106,16 +114,49 @@ export const projectController = {
   async createDocumentUploadIntent(request: Request, response: Response) {
     response.status(201).json({
       success: true,
-      data: await projectService.createDocumentUploadIntent(getRouteParam(request.params.projectId), request.body)
+      data: await projectService.createDocumentUploadIntent(
+        request.user!,
+        getRouteParam(request.params.projectId),
+        request.body
+      )
     });
   },
   async getDocumentDownloadUrl(request: Request, response: Response) {
     response.json({
       success: true,
       data: await projectService.getDocumentDownloadUrl(
+        request.user!,
         getRouteParam(request.params.projectId),
         getRouteParam(request.params.documentId)
       )
+    });
+  },
+  async requestAccess(request: Request, response: Response) {
+    response.status(201).json({
+      success: true,
+      data: await projectService.requestProjectAccess(
+        request.user!,
+        getRouteParam(request.params.projectId),
+        request.body
+      )
+    });
+  },
+  async listAccessRequests(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.listProjectAccessRequests(request.user!)
+    });
+  },
+  async approveAccessRequest(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.approveProjectAccessRequest(request.user!, getRouteParam(request.params.requestId))
+    });
+  },
+  async rejectAccessRequest(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.rejectProjectAccessRequest(request.user!, getRouteParam(request.params.requestId))
     });
   },
   async bulkUpdateStatus(request: Request, response: Response) {

@@ -86,6 +86,12 @@ export const createProjectDocumentUploadIntentSchema = z.object({
   })
 });
 
+export const createProjectAccessRequestSchema = z.object({
+  body: z.object({
+    message: z.string().trim().max(300).optional().or(z.literal(""))
+  })
+});
+
 export const bulkUpdateProjectStatusSchema = z.object({
   body: z.object({
     projectIds: z.array(z.string().min(2)).min(1),

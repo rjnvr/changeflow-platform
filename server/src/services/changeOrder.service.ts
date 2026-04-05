@@ -7,6 +7,7 @@ import { ApiError } from "../utils/apiError.js";
 import { aiSummaryService } from "./aiSummary.service.js";
 import { auditLogService } from "./auditLog.service.js";
 import { emailService } from "./email.service.js";
+import { projectAccessService } from "./projectAccess.service.js";
 import { storageService } from "./storage.service.js";
 
 function looksLikeEmail(value: string) {
@@ -70,24 +71,40 @@ function canEditProject(user: AuthenticatedUser, ownerId: string) {
 }
 
 export const changeOrderService = {
-  async listChangeOrders(projectId?: string, options?: { includeArchived?: boolean }) {
-    return changeOrderRepository.list(projectId, options);
+  async listChangeOrders(
+    requestUser: AuthenticatedUser,
+    projectId?: string,
+    options?: { includeArchived?: boolean }
+  ) {
+    if (projectId) {
+      await projectAccessService.requireProjectAccess(requestUser, projectId);
+      return changeOrderRepository.list(projectId, options);
+    }
+
+    const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {
+      includeArchived: true
+    });
+    const changeOrders = await changeOrderRepository.list(undefined, options);
+
+    return changeOrders.filter((changeOrder) => accessibleProjectIds.includes(changeOrder.projectId));
   },
-  async getChangeOrder(changeOrderId: string) {
+  async getChangeOrder(requestUser: AuthenticatedUser, changeOrderId: string) {
     const changeOrder = await changeOrderRepository.findById(changeOrderId);
 
     if (!changeOrder) {
       throw new ApiError(404, "Change order not found.");
     }
 
+    await projectAccessService.requireProjectAccess(requestUser, changeOrder.projectId);
+
     return changeOrder;
   },
-  async listComments(changeOrderId: string) {
-    await this.getChangeOrder(changeOrderId);
+  async listComments(requestUser: AuthenticatedUser, changeOrderId: string) {
+    await this.getChangeOrder(requestUser, changeOrderId);
     return changeOrderCommentRepository.listByChangeOrder(changeOrderId);
   },
-  async addComment(changeOrderId: string, input: { authorName: string; body: string }) {
-    const changeOrder = await this.getChangeOrder(changeOrderId);
+  async addComment(requestUser: AuthenticatedUser, changeOrderId: string, input: { authorName: string; body: string }) {
+    const changeOrder = await this.getChangeOrder(requestUser, changeOrderId);
     const project = await projectRepository.findById(changeOrder.projectId);
 
     if (!project) {
@@ -110,11 +127,11 @@ export const changeOrderService = {
 
     return comment;
   },
-  async listActivity(changeOrderId: string) {
-    await this.getChangeOrder(changeOrderId);
+  async listActivity(requestUser: AuthenticatedUser, changeOrderId: string) {
+    await this.getChangeOrder(requestUser, changeOrderId);
     return auditLogService.listByEntity("change_order", changeOrderId);
   },
-  async createChangeOrder(input: {
+  async createChangeOrder(requestUser: AuthenticatedUser, input: {
     projectId: string;
     title: string;
     description: string;
@@ -129,11 +146,7 @@ export const changeOrderService = {
       fileSize: number;
     }>;
   }) {
-    const project = await projectRepository.findById(input.projectId);
-
-    if (!project) {
-      throw new ApiError(404, "Project not found.");
-    }
+    const project = await projectAccessService.requireProjectAccess(requestUser, input.projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -184,6 +197,7 @@ export const changeOrderService = {
     return changeOrder;
   },
   async importChangeOrders(
+    requestUser: AuthenticatedUser,
     input: Array<{
       projectId: string;
       title: string;
@@ -195,6 +209,29 @@ export const changeOrderService = {
   ) {
     if (input.length === 0) {
       throw new ApiError(400, "No change orders were provided for import.");
+    }
+
+    const uniqueProjectIds = [...new Set(input.map((row) => row.projectId))];
+    const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {
+      includeArchived: true
+    });
+
+    const inaccessibleProjectId = uniqueProjectIds.find((projectId) => !accessibleProjectIds.includes(projectId));
+
+    if (inaccessibleProjectId) {
+      throw new ApiError(403, "You can only import change orders into projects you can access.");
+    }
+
+    const projects = await Promise.all(uniqueProjectIds.map((projectId) => projectRepository.findById(projectId)));
+
+    for (const project of projects) {
+      if (!project) {
+        throw new ApiError(404, "Project not found.");
+      }
+
+      if (project.archivedAt) {
+        throw new ApiError(400, "Archived projects are read-only.");
+      }
     }
 
     const rowsWithSummaries = await Promise.all(
@@ -220,17 +257,13 @@ export const changeOrderService = {
 
     return createdChangeOrders;
   },
-  async createAttachmentUploadIntent(input: {
+  async createAttachmentUploadIntent(requestUser: AuthenticatedUser, input: {
     projectId: string;
     fileName: string;
     contentType?: string;
     fileSize: number;
   }) {
-    const project = await projectRepository.findById(input.projectId);
-
-    if (!project) {
-      throw new ApiError(404, "Project not found.");
-    }
+    const project = await projectAccessService.requireProjectAccess(requestUser, input.projectId);
 
     if (project.archivedAt) {
       throw new ApiError(400, "Archived projects are read-only.");
@@ -255,7 +288,7 @@ export const changeOrderService = {
       throw new ApiError(400, "Add at least one attachment.");
     }
 
-    const changeOrder = await this.getChangeOrder(changeOrderId);
+    const changeOrder = await this.getChangeOrder(user, changeOrderId);
     const project = await projectRepository.findById(changeOrder.projectId);
 
     if (!project) {
@@ -283,8 +316,8 @@ export const changeOrderService = {
 
     return updatedChangeOrder;
   },
-  async getAttachmentDownloadUrl(changeOrderId: string, attachmentId: string) {
-    await this.getChangeOrder(changeOrderId);
+  async getAttachmentDownloadUrl(user: AuthenticatedUser, changeOrderId: string, attachmentId: string) {
+    await this.getChangeOrder(user, changeOrderId);
 
     const attachment = await changeOrderRepository.findAttachment(changeOrderId, attachmentId);
 
@@ -301,7 +334,7 @@ export const changeOrderService = {
     };
   },
   async removeAttachment(user: AuthenticatedUser, changeOrderId: string, attachmentId: string) {
-    const changeOrder = await this.getChangeOrder(changeOrderId);
+    const changeOrder = await this.getChangeOrder(user, changeOrderId);
     const project = await projectRepository.findById(changeOrder.projectId);
 
     if (!project) {
@@ -343,7 +376,7 @@ export const changeOrderService = {
       assignedTo: string;
     }
   ) {
-    const existingChangeOrder = await this.getChangeOrder(changeOrderId);
+    const existingChangeOrder = await this.getChangeOrder(user, changeOrderId);
     const existingProject = await projectRepository.findById(existingChangeOrder.projectId);
 
     if (!existingProject) {
@@ -408,7 +441,7 @@ export const changeOrderService = {
     changeOrderId: string,
     status: "draft" | "pending_review" | "approved" | "rejected" | "synced"
   ) {
-    const existingChangeOrder = await this.getChangeOrder(changeOrderId);
+    const existingChangeOrder = await this.getChangeOrder(user, changeOrderId);
     const existingProject = await projectRepository.findById(existingChangeOrder.projectId);
 
     if (!existingProject) {
@@ -456,7 +489,7 @@ export const changeOrderService = {
     return changeOrder;
   },
   async archiveChangeOrder(user: AuthenticatedUser, changeOrderId: string) {
-    const existingChangeOrder = await this.getChangeOrder(changeOrderId);
+    const existingChangeOrder = await this.getChangeOrder(user, changeOrderId);
     const project = await projectRepository.findById(existingChangeOrder.projectId);
 
     if (!project) {

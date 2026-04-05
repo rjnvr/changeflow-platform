@@ -7,6 +7,26 @@ export interface Project {
   archivedAt?: string;
   contractValue: number;
   ownerId: string;
+  accessSource?: "admin" | "owner" | "team_assignment" | "granted";
+  accessLocked?: boolean;
+  accessRequestStatus?: "pending" | "approved" | "rejected";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectAccessRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  projectId: string;
+  projectName: string;
+  projectCode: string;
+  projectLocation: string;
+  status: "pending" | "approved" | "rejected";
+  message?: string;
+  handledById?: string;
+  handledAt?: string;
   createdAt: string;
   updatedAt: string;
 }
