@@ -40,7 +40,7 @@ function mapProjectAccessRequest(row: ProjectAccessRequestRow): ProjectAccessReq
 }
 
 async function getDetailedRequestById(requestId: string) {
-  const rows = await prisma.$queryRawUnsafe<ProjectAccessRequestRow[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `
       SELECT
         request."id",
@@ -64,14 +64,14 @@ async function getDetailedRequestById(requestId: string) {
       LIMIT 1
     `,
     requestId
-  );
+  )) as ProjectAccessRequestRow[];
 
   return rows[0] ? mapProjectAccessRequest(rows[0]) : null;
 }
 
 export const projectAccessRequestRepository = {
   async listLatestStatusesForUser(userId: string) {
-    return prisma.$queryRawUnsafe<Array<{ projectId: string; status: "pending" | "approved" | "rejected" }>>(
+    return (await prisma.$queryRawUnsafe(
       `
         SELECT DISTINCT ON ("projectId")
           "projectId",
@@ -81,10 +81,10 @@ export const projectAccessRequestRepository = {
         ORDER BY "projectId", "createdAt" DESC
       `,
       userId
-    );
+    )) as Array<{ projectId: string; status: "pending" | "approved" | "rejected" }>;
   },
   async findPendingByUserAndProject(userId: string, projectId: string) {
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    const rows = (await prisma.$queryRawUnsafe(
       `
         SELECT "id"
         FROM "ProjectAccessRequest"
@@ -96,7 +96,7 @@ export const projectAccessRequestRepository = {
       `,
       userId,
       projectId
-    );
+    )) as Array<{ id: string }>;
 
     return rows[0] ? getDetailedRequestById(rows[0].id) : null;
   },
@@ -124,7 +124,7 @@ export const projectAccessRequestRepository = {
     return getDetailedRequestById(requestId);
   },
   async listPending() {
-    const rows = await prisma.$queryRawUnsafe<ProjectAccessRequestRow[]>(
+    const rows = (await prisma.$queryRawUnsafe(
       `
         SELECT
           request."id",
@@ -147,7 +147,7 @@ export const projectAccessRequestRepository = {
         WHERE request."status" = 'pending'
         ORDER BY request."createdAt" DESC
       `
-    );
+    )) as ProjectAccessRequestRow[];
 
     return rows.map(mapProjectAccessRequest);
   },

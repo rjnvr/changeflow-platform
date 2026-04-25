@@ -1,7 +1,7 @@
-import { ProjectStatus as PrismaProjectStatus } from "@prisma/client";
-
 import { prisma } from "../config/db.js";
 import type { ProjectRecord } from "../types/domain.js";
+
+type PrismaProjectStatus = "active" | "on_hold" | "completed";
 
 type ProjectRow = {
   id: string;
@@ -27,19 +27,19 @@ const projectClient = (prisma as unknown as {
 }).project;
 
 function fromPrismaStatus(status: PrismaProjectStatus): ProjectRecord["status"] {
-  if (status === PrismaProjectStatus.on_hold) {
+  if (status === "on_hold") {
     return "on-hold";
   }
 
   return status;
 }
 
-function toPrismaStatus(status: ProjectRecord["status"]) {
+function toPrismaStatus(status: ProjectRecord["status"]): PrismaProjectStatus {
   if (status === "on-hold") {
-    return PrismaProjectStatus.on_hold;
+    return "on_hold";
   }
 
-  return status === "completed" ? PrismaProjectStatus.completed : PrismaProjectStatus.active;
+  return status === "completed" ? "completed" : "active";
 }
 
 function mapProject(project: ProjectRow): ProjectRecord {

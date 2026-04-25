@@ -4,16 +4,16 @@ import { prisma } from "../config/db.js";
 
 export const projectAccessRepository = {
   async listGrantedProjectIdsForUser(userId: string) {
-    const rows = await prisma.$queryRawUnsafe<Array<{ projectId: string }>>(
+    const rows = (await prisma.$queryRawUnsafe(
       `
         SELECT "projectId"
         FROM "ProjectAccess"
         WHERE "userId" = $1
       `,
       userId
-    );
+    )) as Array<{ projectId: string }>;
 
-    return rows.map((row) => row.projectId);
+    return rows.map((row: { projectId: string }) => row.projectId);
   },
   async grantAccess(input: { userId: string; projectId: string; grantedById?: string }) {
     const now = new Date();

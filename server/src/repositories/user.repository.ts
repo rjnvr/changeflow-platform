@@ -42,13 +42,25 @@ function normalizePersonLookup(value: string) {
 }
 
 let cachedProjectBriefLimitColumn: "dailyProjectBriefLimit" | "monthlyProjectBriefLimit" | null | undefined;
+type InformationSchemaColumnRow = { column_name: string };
+type CompatibleQuotaUserRow = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  passwordHash: string;
+  projectBriefLimit: number;
+  resetPasswordTokenHash: string | null;
+  resetPasswordExpiresAt: Date | null;
+  role: AuthenticatedUser["role"];
+};
 
 async function getProjectBriefLimitColumn() {
   if (cachedProjectBriefLimitColumn !== undefined) {
     return cachedProjectBriefLimitColumn;
   }
 
-  const columns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+  const columns = (await prisma.$queryRawUnsafe(
     `
       SELECT column_name
       FROM information_schema.columns
@@ -56,14 +68,14 @@ async function getProjectBriefLimitColumn() {
         AND table_name = 'User'
         AND column_name IN ('dailyProjectBriefLimit', 'monthlyProjectBriefLimit')
     `
-  );
+  )) as InformationSchemaColumnRow[];
 
-  if (columns.some((column) => column.column_name === "dailyProjectBriefLimit")) {
+  if (columns.some((column: InformationSchemaColumnRow) => column.column_name === "dailyProjectBriefLimit")) {
     cachedProjectBriefLimitColumn = "dailyProjectBriefLimit";
     return cachedProjectBriefLimitColumn;
   }
 
-  if (columns.some((column) => column.column_name === "monthlyProjectBriefLimit")) {
+  if (columns.some((column: InformationSchemaColumnRow) => column.column_name === "monthlyProjectBriefLimit")) {
     cachedProjectBriefLimitColumn = "monthlyProjectBriefLimit";
     return cachedProjectBriefLimitColumn;
   }
@@ -203,7 +215,7 @@ export const userRepository = {
       select: authUserSelect
     });
 
-    const matchedUser = users.find((user) => {
+    const matchedUser = users.find((user: (typeof users)[number]) => {
       const normalizedEmail = normalizePersonLookup(user.email);
       const normalizedFullName = normalizePersonLookup(`${user.firstName} ${user.lastName}`);
 
@@ -238,19 +250,7 @@ export const userRepository = {
     const projectBriefLimitSelect = projectBriefLimitColumn
       ? `"${projectBriefLimitColumn}"::int AS "projectBriefLimit"`
       : `3::int AS "projectBriefLimit"`;
-    const users = await prisma.$queryRawUnsafe<
-      Array<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        passwordHash: string;
-        projectBriefLimit: number;
-        resetPasswordTokenHash: string | null;
-        resetPasswordExpiresAt: Date | null;
-        role: AuthenticatedUser["role"];
-      }>
-    >(
+    const users = (await prisma.$queryRawUnsafe(
       `
         SELECT
           "id",
@@ -265,7 +265,7 @@ export const userRepository = {
         FROM "User"
         ORDER BY "role" ASC, "firstName" ASC, "lastName" ASC
       `
-    );
+    )) as CompatibleQuotaUserRow[];
 
     return users.map(mapCompatibleQuotaUser);
   },
@@ -328,19 +328,7 @@ export const userRepository = {
       });
     }
 
-    const updatedUsers = await prisma.$queryRawUnsafe<
-      Array<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        passwordHash: string;
-        projectBriefLimit: number;
-        resetPasswordTokenHash: string | null;
-        resetPasswordExpiresAt: Date | null;
-        role: AuthenticatedUser["role"];
-      }>
-    >(
+    const updatedUsers = (await prisma.$queryRawUnsafe(
       `
         UPDATE "User"
         SET "${projectBriefLimitColumn}" = $1, "updatedAt" = NOW()
@@ -358,7 +346,7 @@ export const userRepository = {
       `,
       dailyProjectBriefLimit,
       userId
-    );
+    )) as CompatibleQuotaUserRow[];
 
     const updatedUser = updatedUsers[0];
 

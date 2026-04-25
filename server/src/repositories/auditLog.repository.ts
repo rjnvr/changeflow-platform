@@ -1,5 +1,3 @@
-import { Prisma } from "@prisma/client";
-
 import { prisma } from "../config/db.js";
 import type { AuditLogRecord } from "../types/domain.js";
 
@@ -8,7 +6,7 @@ function mapAuditLog(log: {
   action: string;
   entityType: string;
   entityId: string;
-  metadata: Prisma.JsonValue | null;
+  metadata: unknown;
   createdAt: Date;
 }): AuditLogRecord {
   return {
@@ -16,7 +14,10 @@ function mapAuditLog(log: {
     action: log.action,
     entityType: log.entityType,
     entityId: log.entityId,
-    metadata: (log.metadata as Record<string, unknown> | null) ?? undefined,
+    metadata:
+      log.metadata && typeof log.metadata === "object" && !Array.isArray(log.metadata)
+        ? (log.metadata as Record<string, unknown>)
+        : undefined,
     createdAt: log.createdAt.toISOString()
   };
 }
@@ -46,7 +47,7 @@ export const auditLogRepository = {
         action: log.action,
         entityType: log.entityType,
         entityId: log.entityId,
-        metadata: log.metadata ? (log.metadata as Prisma.InputJsonValue) : undefined
+        metadata: log.metadata ? ((log.metadata as unknown) as never) : undefined
       }
     });
 

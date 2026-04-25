@@ -105,7 +105,7 @@ export const projectTeamMemberRepository = {
     return teamMembers.map(mapProjectTeamMember);
   },
   async listDirectory() {
-    const teamMembers = await projectTeamMemberClient.findMany({
+    const teamMembers = (await projectTeamMemberClient.findMany({
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       include: {
         project: {
@@ -116,25 +116,21 @@ export const projectTeamMemberRepository = {
           }
         }
       }
-    });
+    })) as Array<{
+      id: string;
+      projectId: string;
+      name: string;
+      role: string;
+      createdAt: Date;
+      updatedAt: Date;
+      project: {
+        name: string;
+        code: string;
+        location: string;
+      };
+    }>;
 
-    return teamMembers.map((member) =>
-      mapDirectoryMember(
-        member as {
-          id: string;
-          projectId: string;
-          name: string;
-          role: string;
-          createdAt: Date;
-          updatedAt: Date;
-          project: {
-            name: string;
-            code: string;
-            location: string;
-          };
-        }
-      )
-    );
+    return teamMembers.map((member) => mapDirectoryMember(member));
   },
   async create(input: Omit<ProjectTeamMemberRecord, "id" | "createdAt" | "updatedAt">) {
     const createdMember = await projectTeamMemberClient.create({

@@ -1,12 +1,32 @@
-import {
-  ChangeOrderStatus,
-  IntegrationStatus,
-  PrismaClient,
-  ProjectStatus,
-  UserRole
-} from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 import { hashPassword } from "../src/utils/password.js";
+
+const UserRole = {
+  admin: "admin",
+  project_manager: "project_manager",
+  accounting: "accounting"
+} as const;
+
+const ProjectStatus = {
+  active: "active",
+  on_hold: "on_hold",
+  completed: "completed"
+} as const;
+
+const ChangeOrderStatus = {
+  draft: "draft",
+  pending_review: "pending_review",
+  approved: "approved",
+  rejected: "rejected",
+  synced: "synced"
+} as const;
+
+const IntegrationStatus = {
+  connected: "connected",
+  disconnected: "disconnected",
+  error: "error"
+} as const;
 
 const prisma = new PrismaClient();
 const projectTeamMemberClient = (prisma as PrismaClient & {
