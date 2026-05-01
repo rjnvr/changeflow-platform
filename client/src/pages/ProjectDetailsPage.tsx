@@ -39,6 +39,8 @@ import { useChangeOrders } from "../hooks/useChangeOrders";
 import { useProjectDocuments } from "../hooks/useProjectDocuments";
 import { useProjectTeamMembers } from "../hooks/useProjectTeamMembers";
 import type {
+  AgentMemoryEntry,
+  AgentRun,
   DocumentProcessingRun,
   Project,
   ProjectAgentWorkspace,
@@ -320,6 +322,8 @@ export function ProjectDetailsPage() {
   const projectTasks = agentWorkspace?.tasks ?? [];
   const projectRiskFlags = agentWorkspace?.riskFlags ?? [];
   const latestProcessingRuns = agentWorkspace?.processingRuns.slice(0, 3) ?? [];
+  const latestAgentRuns = agentWorkspace?.agentRuns.slice(0, 2) ?? [];
+  const latestMemoryEntries = agentWorkspace?.memoryEntries.slice(0, 3) ?? [];
   const impactValue = changeOrders.reduce((total, item) => total + item.amount, 0);
   const utilization = Math.min(64 + changeOrders.length * 4, 92);
 
@@ -727,6 +731,38 @@ export function ProjectDetailsPage() {
                 <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
               </Stack>
 
+              {latestAgentRuns.length > 0 || latestMemoryEntries.length > 0 ? (
+                <Stack spacing={1.5} sx={{ mb: 2.6 }}>
+                  {latestAgentRuns.map((run: AgentRun) => (
+                    <Paper
+                      key={run.id}
+                      elevation={0}
+                      sx={{
+                        p: 1.8,
+                        borderRadius: 3,
+                        backgroundColor: "#F6FBFF",
+                        border: "1px solid rgba(213,236,248,0.9)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {run.trigger.replace(/_/g, " ")} • {run.status}
+                      </Typography>
+                      <Typography sx={{ mt: 0.35, fontSize: "0.9rem", fontWeight: 800, color: "#00342B" }}>
+                        {run.summary ?? "Recent agent run recorded."}
+                      </Typography>
+                    </Paper>
+                  ))}
+                  {latestMemoryEntries.map((entry: AgentMemoryEntry) => (
+                    <Typography key={entry.id} sx={{ fontSize: "0.84rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                      <Box component="span" sx={{ fontWeight: 800, color: "#046B5E" }}>
+                        {entry.kind.replace(/_/g, " ")}:
+                      </Box>{" "}
+                      {entry.title}
+                    </Typography>
+                  ))}
+                </Stack>
+              ) : null}
+
               {projectTasks.length > 0 ? (
                 <Stack spacing={2}>
                   {projectTasks.slice(0, 4).map((task: ProjectTask) => (
@@ -754,6 +790,9 @@ export function ProjectDetailsPage() {
                           </Typography>
                         ) : null}
                       </Stack>
+                      <ButtonBase onClick={() => navigate(`/app/tasks/${task.id}`)} sx={{ mt: 1.2, color: "#046B5E" }}>
+                        <Typography sx={{ fontSize: "0.8rem", fontWeight: 800 }}>Open Task</Typography>
+                      </ButtonBase>
                     </Paper>
                   ))}
                 </Stack>
@@ -818,6 +857,9 @@ export function ProjectDetailsPage() {
                       <Typography sx={{ mt: 0.8, fontSize: "0.94rem", lineHeight: 1.6, color: "#6B412C" }}>
                         {riskFlag.description}
                       </Typography>
+                      <ButtonBase onClick={() => navigate(`/app/risk-flags/${riskFlag.id}`)} sx={{ mt: 1.2, color: "#872000" }}>
+                        <Typography sx={{ fontSize: "0.8rem", fontWeight: 800 }}>Open Risk Flag</Typography>
+                      </ButtonBase>
                     </Paper>
                   ))}
                 </Stack>
@@ -1638,6 +1680,8 @@ export function ProjectDetailsPage() {
         tasks={projectTasks}
         riskFlags={projectRiskFlags}
         processingRuns={agentWorkspace?.processingRuns ?? []}
+        agentRuns={agentWorkspace?.agentRuns ?? []}
+        memoryEntries={agentWorkspace?.memoryEntries ?? []}
       />
     </Stack>
   );

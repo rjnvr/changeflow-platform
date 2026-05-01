@@ -96,10 +96,22 @@ export const projectController = {
       data: await projectService.listProjectTasks(request.user!)
     });
   },
+  async getTask(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.getProjectTask(request.user!, getRouteParam(request.params.taskId))
+    });
+  },
   async listRiskFlags(request: Request, response: Response) {
     response.json({
       success: true,
       data: await projectService.listProjectRiskFlags(request.user!)
+    });
+  },
+  async getRiskFlag(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.getProjectRiskFlag(request.user!, getRouteParam(request.params.riskFlagId))
     });
   },
   async updateTaskStatus(request: Request, response: Response) {
@@ -169,6 +181,16 @@ export const projectController = {
     response.json({
       success: true,
       data: await projectService.getDocumentDownloadUrl(
+        request.user!,
+        getRouteParam(request.params.projectId),
+        getRouteParam(request.params.documentId)
+      )
+    });
+  },
+  async reprocessDocument(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.reprocessDocument(
         request.user!,
         getRouteParam(request.params.projectId),
         getRouteParam(request.params.documentId)

@@ -2,6 +2,7 @@ import { documentChunkRepository } from "../repositories/documentChunk.repositor
 import { projectDocumentRepository } from "../repositories/projectDocument.repository.js";
 import type { DocumentChunkRecord, ProjectQuestionAnswerRecord } from "../types/domain.js";
 import { aiSummaryService } from "./aiSummary.service.js";
+import { embeddingService } from "./embedding.service.js";
 
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
@@ -25,6 +26,30 @@ function scoreChunk(questionTokens: string[], chunk: DocumentChunkRecord) {
   }
 
   return score;
+}
+
+function cosineSimilarity(left: number[], right: number[]) {
+  if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    dotProduct += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  if (leftMagnitude === 0 || rightMagnitude === 0) {
+    return 0;
+  }
+
+  return dotProduct / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
 function chunkDocumentText(text: string, maxChars = 1400) {
@@ -77,16 +102,43 @@ export const ragService = {
   async answerProjectQuestion(input: { projectId: string; question: string }) {
     const questionTokens = tokenize(input.question);
     const allChunks = await documentChunkRepository.listByProject(input.projectId);
-    const rankedChunks = allChunks
+    const lexicalRankedChunks = allChunks
       .map((chunk) => ({
         chunk,
         score: scoreChunk(questionTokens, chunk)
       }))
       .filter((entry) => entry.score > 0)
       .sort((left, right) => right.score - left.score || left.chunk.chunkIndex - right.chunk.chunkIndex)
-      .slice(0, 4);
+      .slice(0, 8);
 
-    const citedChunks = rankedChunks.length > 0 ? rankedChunks.map((entry) => entry.chunk) : allChunks.slice(0, 3);
+    let citedChunks = lexicalRankedChunks.length > 0 ? lexicalRankedChunks.map((entry) => entry.chunk) : allChunks.slice(0, 4);
+
+    if (embeddingService.isConfigured() && allChunks.some((chunk) => Array.isArray(chunk.embedding) && chunk.embedding.length > 0)) {
+      const [questionEmbedding] = await embeddingService.embedTexts([input.question], "query");
+
+      if (questionEmbedding) {
+        const semanticRankedChunks = allChunks
+          .map((chunk) => ({
+            chunk,
+            semanticScore: chunk.embedding ? cosineSimilarity(questionEmbedding, chunk.embedding) : 0,
+            lexicalScore: scoreChunk(questionTokens, chunk)
+          }))
+          .filter((entry) => entry.semanticScore > 0 || entry.lexicalScore > 0)
+          .sort(
+            (left, right) =>
+              right.semanticScore - left.semanticScore ||
+              right.lexicalScore - left.lexicalScore ||
+              left.chunk.chunkIndex - right.chunk.chunkIndex
+          )
+          .slice(0, 4)
+          .map((entry) => entry.chunk);
+
+        if (semanticRankedChunks.length > 0) {
+          citedChunks = semanticRankedChunks;
+        }
+      }
+    }
+
     const documents = await projectDocumentRepository.listByProject(input.projectId);
     const documentMap = new Map(documents.map((document) => [document.id, document]));
 

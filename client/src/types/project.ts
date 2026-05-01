@@ -142,10 +142,48 @@ export interface DocumentProcessingRun {
   updatedAt: string;
 }
 
+export interface AgentStep {
+  id: string;
+  runId: string;
+  stepType: string;
+  status: string;
+  title: string;
+  details?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentRun {
+  id: string;
+  projectId: string;
+  documentId?: string;
+  trigger: string;
+  status: string;
+  summary?: string;
+  model?: string;
+  steps: AgentStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentMemoryEntry {
+  id: string;
+  projectId: string;
+  documentId?: string;
+  runId?: string;
+  kind: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectAgentWorkspace {
   tasks: ProjectTask[];
   riskFlags: ProjectRiskFlag[];
   processingRuns: DocumentProcessingRun[];
+  agentRuns: AgentRun[];
+  memoryEntries: AgentMemoryEntry[];
 }
 
 export interface ProjectQuestionAnswer {

@@ -21,6 +21,7 @@ const projectTaskClient = (prisma as unknown as {
     create(args: unknown): Promise<ProjectTaskRow>;
     findFirst(args: unknown): Promise<ProjectTaskRow | null>;
     update(args: unknown): Promise<ProjectTaskRow>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
   };
 }).projectTask;
 
@@ -66,6 +67,14 @@ export const projectTaskRepository = {
 
     return tasks.map(mapProjectTask);
   },
+  async findById(taskId: string) {
+    const task = await projectTaskClient.findFirst({
+      where: { id: taskId },
+      include: includeProject
+    });
+
+    return task ? mapProjectTask(task) : null;
+  },
   async create(input: Omit<ProjectTaskRecord, "id" | "createdAt" | "updatedAt">) {
     const task = await projectTaskClient.create({
       data: {
@@ -99,5 +108,14 @@ export const projectTaskRepository = {
     });
 
     return mapProjectTask(task);
+  },
+  async deleteAgentTasksForDocument(projectId: string, documentId: string) {
+    await projectTaskClient.deleteMany({
+      where: {
+        projectId,
+        sourceDocumentId: documentId,
+        createdByAgent: true
+      }
+    });
   }
 };

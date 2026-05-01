@@ -10,6 +10,8 @@ import { projectBriefGenerationRepository } from "../repositories/projectBriefGe
 import { projectRiskFlagRepository } from "../repositories/projectRiskFlag.repository.js";
 import { projectTaskRepository } from "../repositories/projectTask.repository.js";
 import { documentProcessingRunRepository } from "../repositories/documentProcessingRun.repository.js";
+import { agentMemoryEntryRepository } from "../repositories/agentMemoryEntry.repository.js";
+import { agentRunRepository } from "../repositories/agentRun.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { auditLogService } from "./auditLog.service.js";
 import { projectAccessService } from "./projectAccess.service.js";
@@ -260,16 +262,20 @@ export const projectService = {
   async getAgentWorkspace(requestUser: AuthenticatedUser, projectId: string) {
     await this.getProject(requestUser, projectId);
 
-    const [tasks, riskFlags, processingRuns] = await Promise.all([
+    const [tasks, riskFlags, processingRuns, agentRuns, memoryEntries] = await Promise.all([
       projectTaskRepository.listByProject(projectId),
       projectRiskFlagRepository.listByProject(projectId),
-      documentProcessingRunRepository.listByProject(projectId)
+      documentProcessingRunRepository.listByProject(projectId),
+      agentRunRepository.listByProject(projectId),
+      agentMemoryEntryRepository.listByProject(projectId)
     ]);
 
     return {
       tasks,
       riskFlags,
-      processingRuns
+      processingRuns,
+      agentRuns,
+      memoryEntries
     };
   },
   async listProjectTasks(requestUser: AuthenticatedUser) {
@@ -279,6 +285,16 @@ export const projectService = {
     const tasks = await projectTaskRepository.listAll();
     return tasks.filter((task) => accessibleProjectIds.includes(task.projectId));
   },
+  async getProjectTask(requestUser: AuthenticatedUser, taskId: string) {
+    const task = await projectTaskRepository.findById(taskId);
+
+    if (!task) {
+      throw new ApiError(404, "Task not found.");
+    }
+
+    await this.getProject(requestUser, task.projectId);
+    return task;
+  },
   async listProjectRiskFlags(requestUser: AuthenticatedUser) {
     const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {
       includeArchived: true
@@ -286,17 +302,22 @@ export const projectService = {
     const riskFlags = await projectRiskFlagRepository.listAll();
     return riskFlags.filter((riskFlag) => accessibleProjectIds.includes(riskFlag.projectId));
   },
+  async getProjectRiskFlag(requestUser: AuthenticatedUser, riskFlagId: string) {
+    const riskFlag = await projectRiskFlagRepository.findById(riskFlagId);
+
+    if (!riskFlag) {
+      throw new ApiError(404, "Risk flag not found.");
+    }
+
+    await this.getProject(requestUser, riskFlag.projectId);
+    return riskFlag;
+  },
   async updateProjectTaskStatus(
     requestUser: AuthenticatedUser,
     taskId: string,
     input: { status: "suggested" | "open" | "in_progress" | "done" }
   ) {
-    const tasks = await this.listProjectTasks(requestUser);
-    const existingTask = tasks.find((task) => task.id === taskId);
-
-    if (!existingTask) {
-      throw new ApiError(404, "Task not found.");
-    }
+    await this.getProjectTask(requestUser, taskId);
 
     const updatedTask = await projectTaskRepository.updateStatus(taskId, input.status);
 
@@ -316,12 +337,7 @@ export const projectService = {
     riskFlagId: string,
     input: { status: "open" | "reviewed" | "mitigated" }
   ) {
-    const riskFlags = await this.listProjectRiskFlags(requestUser);
-    const existingRiskFlag = riskFlags.find((riskFlag) => riskFlag.id === riskFlagId);
-
-    if (!existingRiskFlag) {
-      throw new ApiError(404, "Risk flag not found.");
-    }
+    await this.getProjectRiskFlag(requestUser, riskFlagId);
 
     const updatedRiskFlag = await projectRiskFlagRepository.updateStatus(riskFlagId, input.status);
 
@@ -398,7 +414,8 @@ export const projectService = {
     return documentAgentService.processProjectDocument({
       project,
       document,
-      teamMembers
+      teamMembers,
+      trigger: "document_upload"
     });
   },
   async updateDocument(
@@ -527,6 +544,48 @@ export const projectService = {
         contentType: document.contentType
       })
     };
+  },
+  async reprocessDocument(user: AuthenticatedUser, projectId: string, documentId: string) {
+    const project = await this.getProject(user, projectId);
+
+    if (project.archivedAt) {
+      throw new ApiError(400, "Archived projects are read-only.");
+    }
+
+    if (!canEditProject(user, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner can reprocess documents.");
+    }
+
+    const document = await projectDocumentRepository.findById(projectId, documentId);
+
+    if (!document) {
+      throw new ApiError(404, "Document not found.");
+    }
+
+    const teamMembers = await projectTeamMemberRepository.listByProject(projectId);
+
+    const queuedDocument = await projectDocumentRepository.update(projectId, documentId, {
+      title: document.title,
+      kind: document.kind,
+      summary: document.summary,
+      aiSummary: document.aiSummary,
+      agentStatus: "queued",
+      processingError: "",
+      lastProcessedAt: document.lastProcessedAt,
+      assignedTo: document.assignedTo,
+      url: document.url
+    });
+
+    await auditLogService.record("project.document.reprocess_requested", "projectDocument", document.id, {
+      projectId
+    });
+
+    return documentAgentService.processProjectDocument({
+      project,
+      document: queuedDocument ?? document,
+      teamMembers,
+      trigger: "manual_reprocess"
+    });
   },
   async bulkUpdateProjectStatus(input: {
     projectIds: string[];

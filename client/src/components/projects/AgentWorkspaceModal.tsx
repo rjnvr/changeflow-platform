@@ -14,7 +14,7 @@ import { useNavigate } from "react-router-dom";
 
 import { updateProjectRiskFlagStatus, updateProjectTaskStatus } from "../../api/projects";
 import { useFeedbackContext } from "../../context/FeedbackContext";
-import type { DocumentProcessingRun, ProjectRiskFlag, ProjectTask } from "../../types/project";
+import type { AgentMemoryEntry, AgentRun, DocumentProcessingRun, ProjectRiskFlag, ProjectTask } from "../../types/project";
 import { formatDateTime } from "../../utils/formatDate";
 
 interface AgentWorkspaceModalProps {
@@ -23,6 +23,8 @@ interface AgentWorkspaceModalProps {
   tasks: ProjectTask[];
   riskFlags: ProjectRiskFlag[];
   processingRuns: DocumentProcessingRun[];
+  agentRuns: AgentRun[];
+  memoryEntries: AgentMemoryEntry[];
 }
 
 export function AgentWorkspaceModal({
@@ -30,7 +32,9 @@ export function AgentWorkspaceModal({
   onClose,
   tasks,
   riskFlags,
-  processingRuns
+  processingRuns,
+  agentRuns,
+  memoryEntries
 }: AgentWorkspaceModalProps) {
   const navigate = useNavigate();
   const { showToast } = useFeedbackContext();
@@ -142,7 +146,7 @@ export function AgentWorkspaceModal({
               maxHeight: "calc(90vh - 112px)",
               overflowY: "auto",
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(0, 1fr))" },
+              gridTemplateColumns: { xs: "1fr", xl: "repeat(4, minmax(0, 1fr))" },
               gap: 3
             }}
           >
@@ -169,6 +173,15 @@ export function AgentWorkspaceModal({
                           <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>Add to Task Board</Typography>
                         </ButtonBase>
                       ) : null}
+                      <ButtonBase
+                        onClick={() => {
+                          onClose();
+                          navigate(`/app/tasks/${task.id}`);
+                        }}
+                        sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
+                      >
+                        <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>View Details</Typography>
+                      </ButtonBase>
                       <ButtonBase
                         onClick={() => {
                           onClose();
@@ -218,6 +231,15 @@ export function AgentWorkspaceModal({
                           <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>Mark Mitigated</Typography>
                         </ButtonBase>
                       ) : null}
+                      <ButtonBase
+                        onClick={() => {
+                          onClose();
+                          navigate(`/app/risk-flags/${riskFlag.id}`);
+                        }}
+                        sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#872000" }}
+                      >
+                        <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>View Details</Typography>
+                      </ButtonBase>
                     </Stack>
                   </Paper>
                 ))
@@ -247,6 +269,72 @@ export function AgentWorkspaceModal({
                 ))
               ) : (
                 <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No document-processing runs recorded yet.</Typography>
+              )}
+            </Stack>
+
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Agent Run History</Typography>
+              </Stack>
+              {agentRuns.length > 0 ? (
+                agentRuns.slice(0, 5).map((run) => (
+                  <Paper key={run.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#FFFFFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                    <Typography sx={{ fontSize: "0.96rem", fontWeight: 800, color: "#00342B" }}>
+                      {run.trigger.replace(/_/g, " ")} • {run.status}
+                    </Typography>
+                    <Typography sx={{ mt: 0.6, fontSize: "0.84rem", color: "#5A6A84" }}>
+                      {formatDateTime(run.updatedAt)}{run.model ? ` • ${run.model}` : ""}
+                    </Typography>
+                    {run.summary ? (
+                      <Typography sx={{ mt: 0.8, fontSize: "0.88rem", lineHeight: 1.6, color: "#42536D" }}>
+                        {run.summary}
+                      </Typography>
+                    ) : null}
+                    {run.steps.length > 0 ? (
+                      <Stack spacing={0.8} sx={{ mt: 1.2 }}>
+                        {run.steps.slice(0, 4).map((step) => (
+                          <Box key={step.id}>
+                            <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                              {step.stepType} • {step.status}
+                            </Typography>
+                            <Typography sx={{ mt: 0.2, fontSize: "0.82rem", fontWeight: 700, color: "#00342B" }}>
+                              {step.title}
+                            </Typography>
+                            {step.details ? (
+                              <Typography sx={{ mt: 0.2, fontSize: "0.8rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                                {step.details}
+                              </Typography>
+                            ) : null}
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : null}
+                  </Paper>
+                ))
+              ) : (
+                <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No agent runs have been recorded yet.</Typography>
+              )}
+            </Stack>
+
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <WarningAmberRoundedIcon sx={{ color: "#046B5E" }} />
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Project Memory</Typography>
+              </Stack>
+              {memoryEntries.length > 0 ? (
+                memoryEntries.slice(0, 6).map((entry) => (
+                  <Paper key={entry.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#F9FCFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                      {entry.kind.replace(/_/g, " ")}
+                    </Typography>
+                    <Typography sx={{ mt: 0.35, fontSize: "0.9rem", fontWeight: 800, color: "#00342B" }}>{entry.title}</Typography>
+                    <Typography sx={{ mt: 0.55, fontSize: "0.84rem", lineHeight: 1.6, color: "#42536D" }}>{entry.content}</Typography>
+                    <Typography sx={{ mt: 0.8, fontSize: "0.76rem", color: "#7A869F" }}>{formatDateTime(entry.updatedAt)}</Typography>
+                  </Paper>
+                ))
+              ) : (
+                <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No reusable project memory has been stored yet.</Typography>
               )}
             </Stack>
           </Box>

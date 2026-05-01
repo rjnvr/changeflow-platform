@@ -27,7 +27,9 @@ projectRouter.get("/locked", asyncHandler(projectController.listLocked));
 projectRouter.get("/access-requests", asyncHandler(projectController.listAccessRequests));
 projectRouter.get("/team-members", asyncHandler(projectController.listTeamDirectory));
 projectRouter.get("/tasks", asyncHandler(projectController.listTasks));
+projectRouter.get("/tasks/:taskId", asyncHandler(projectController.getTask));
 projectRouter.get("/risk-flags", asyncHandler(projectController.listRiskFlags));
+projectRouter.get("/risk-flags/:riskFlagId", asyncHandler(projectController.getRiskFlag));
 projectRouter.patch(
   "/status",
   validate(bulkUpdateProjectStatusSchema),
@@ -65,6 +67,7 @@ projectRouter.get("/:projectId/documents", asyncHandler(projectController.listDo
 projectRouter.get("/:projectId/agent-workspace", asyncHandler(projectController.getAgentWorkspace));
 projectRouter.post("/:projectId/questions", validate(askProjectQuestionSchema), asyncHandler(projectController.askQuestion));
 projectRouter.get("/:projectId/documents/:documentId/download-url", asyncHandler(projectController.getDocumentDownloadUrl));
+projectRouter.post("/:projectId/documents/:documentId/reprocess", asyncHandler(projectController.reprocessDocument));
 projectRouter.post(
   "/:projectId/team",
   validate(createProjectTeamMemberSchema),

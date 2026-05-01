@@ -7,6 +7,8 @@ type DocumentChunkRow = {
   documentId: string;
   chunkIndex: number;
   content: string;
+  embeddingJson: string | null;
+  embeddingModel: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -26,13 +28,19 @@ function mapDocumentChunk(row: DocumentChunkRow): DocumentChunkRecord {
     documentId: row.documentId,
     chunkIndex: row.chunkIndex,
     content: row.content,
+    embedding: row.embeddingJson ? (JSON.parse(row.embeddingJson) as number[]) : undefined,
+    embeddingModel: row.embeddingModel ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
 }
 
 export const documentChunkRepository = {
-  async replaceForDocument(projectId: string, documentId: string, chunks: Array<{ chunkIndex: number; content: string }>) {
+  async replaceForDocument(
+    projectId: string,
+    documentId: string,
+    chunks: Array<{ chunkIndex: number; content: string; embedding?: number[]; embeddingModel?: string }>
+  ) {
     await (prisma as unknown as { $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown> }).$executeRawUnsafe(
       'DELETE FROM "DocumentChunk" WHERE "documentId" = $1',
       documentId
@@ -47,7 +55,9 @@ export const documentChunkRepository = {
         projectId,
         documentId,
         chunkIndex: chunk.chunkIndex,
-        content: chunk.content
+        content: chunk.content,
+        embeddingJson: chunk.embedding ? JSON.stringify(chunk.embedding) : null,
+        embeddingModel: chunk.embeddingModel ?? null
       }))
     });
   },
@@ -66,5 +76,23 @@ export const documentChunkRepository = {
     });
 
     return rows.map(mapDocumentChunk);
+  },
+  async updateEmbeddings(
+    documentId: string,
+    chunks: Array<{ chunkIndex: number; embedding?: number[]; embeddingModel?: string }>
+  ) {
+    await Promise.all(
+      chunks.map((chunk) =>
+        (prisma as unknown as {
+          $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
+        }).$executeRawUnsafe(
+          'UPDATE "DocumentChunk" SET "embeddingJson" = $1, "embeddingModel" = $2, "updatedAt" = CURRENT_TIMESTAMP WHERE "documentId" = $3 AND "chunkIndex" = $4',
+          chunk.embedding ? JSON.stringify(chunk.embedding) : null,
+          chunk.embeddingModel ?? null,
+          documentId,
+          chunk.chunkIndex
+        )
+      )
+    );
   }
 };

@@ -70,6 +70,8 @@ model Project {
   riskFlags     ProjectRiskFlag[]
   documentProcessingRuns DocumentProcessingRun[]
   documentChunks DocumentChunk[]
+  agentRuns     AgentRun[]
+  agentMemoryEntries AgentMemoryEntry[]
   accessGrants  ProjectAccess[]
   accessRequests ProjectAccessRequest[]
   projectBriefGenerations ProjectBriefGeneration[]
@@ -137,6 +139,8 @@ model ProjectDocument {
   generatedTasks ProjectTask[]
   generatedRiskFlags ProjectRiskFlag[]
   chunks DocumentChunk[]
+  agentRuns AgentRun[]
+  agentMemoryEntries AgentMemoryEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -147,6 +151,8 @@ model DocumentChunk {
   documentId String
   chunkIndex Int
   content    String
+  embeddingJson String?
+  embeddingModel String?
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   document   ProjectDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
@@ -198,6 +204,58 @@ model DocumentProcessingRun {
   document         ProjectDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model AgentRun {
+  id         String   @id @default(cuid())
+  projectId  String
+  documentId String?
+  trigger    String
+  status     String   @default("running")
+  summary    String?
+  model      String?
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document   ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  steps      AgentStep[]
+  memoryEntries AgentMemoryEntry[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([documentId])
+}
+
+model AgentStep {
+  id        String   @id @default(cuid())
+  runId     String
+  stepType  String
+  status    String   @default("completed")
+  title     String
+  details   String?
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([runId])
+}
+
+model AgentMemoryEntry {
+  id         String   @id @default(cuid())
+  projectId  String
+  documentId String?
+  runId      String?
+  kind       String
+  title      String
+  content    String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document   ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  run        AgentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([documentId])
+  @@index([runId])
 }
 
 model ChangeOrder {

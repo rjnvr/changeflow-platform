@@ -10,6 +10,8 @@ const envSchema = z.object({
   SLACK_WEBHOOK_URL: z.string().optional().default(""),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
   ANTHROPIC_MODEL: z.string().optional().default("claude-haiku-4-5"),
+  VOYAGE_API_KEY: z.string().optional().default(""),
+  VOYAGE_EMBEDDING_MODEL: z.string().optional().default("voyage-3.5-lite"),
   EMAIL_PROVIDER: z.string().optional().default("resend"),
   EMAIL_FROM: z.string().optional().default("notifications@changeflow.dev"),
   EMAIL_API_KEY: z.string().optional().default(""),

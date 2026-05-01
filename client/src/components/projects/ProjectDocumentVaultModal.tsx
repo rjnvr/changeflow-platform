@@ -10,6 +10,7 @@ import InsertDriveFileRoundedIcon from "@mui/icons-material/InsertDriveFileRound
 import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
 import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
@@ -25,7 +26,8 @@ import {
   createProjectDocument,
   createProjectDocumentUploadIntent,
   deleteProjectDocument,
-  getProjectDocumentDownloadUrl
+  getProjectDocumentDownloadUrl,
+  reprocessProjectDocument
 } from "../../api/projects";
 import type { Project, ProjectDocument, ProjectTeamMember } from "../../types/project";
 import { formatDate } from "../../utils/formatDate";
@@ -114,6 +116,7 @@ export function ProjectDocumentVaultModal({
   const [submitting, setSubmitting] = useState(false);
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [reprocessingDocumentId, setReprocessingDocumentId] = useState<string | null>(null);
   const [editingDocument, setEditingDocument] = useState<ProjectDocument | null>(null);
   const [error, setError] = useState("");
 
@@ -293,6 +296,20 @@ export function ProjectDocumentVaultModal({
     }
   }
 
+  async function handleReprocessDocument(document: ProjectDocument) {
+    setReprocessingDocumentId(document.id);
+    setError("");
+
+    try {
+      await reprocessProjectDocument(project.id, document.id);
+      await onCreated?.();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to reprocess document.");
+    } finally {
+      setReprocessingDocumentId(null);
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} sx={{ zIndex: 1400 }}>
       <>
@@ -466,6 +483,27 @@ export function ProjectDocumentVaultModal({
                                   <OpenInNewRoundedIcon sx={{ fontSize: 18 }} />
                                   <Typography sx={{ fontSize: "0.86rem", fontWeight: 800 }}>
                                     {openingDocumentId === document.id ? "Opening..." : "Open"}
+                                  </Typography>
+                                </Stack>
+                              </ButtonBase>
+                            ) : null}
+                            {canEdit ? (
+                              <ButtonBase
+                                onClick={() => handleReprocessDocument(document)}
+                                disabled={reprocessingDocumentId === document.id}
+                                sx={{
+                                  px: 2,
+                                  py: 1,
+                                  borderRadius: 2.5,
+                                  backgroundColor: "#F3FAFF",
+                                  color: "#046B5E",
+                                  opacity: reprocessingDocumentId === document.id ? 0.6 : 1
+                                }}
+                              >
+                                <Stack direction="row" spacing={0.8} alignItems="center">
+                                  <AutorenewRoundedIcon sx={{ fontSize: 18 }} />
+                                  <Typography sx={{ fontSize: "0.86rem", fontWeight: 800 }}>
+                                    {reprocessingDocumentId === document.id ? "Reprocessing..." : "Reprocess"}
                                   </Typography>
                                 </Stack>
                               </ButtonBase>

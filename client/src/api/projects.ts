@@ -125,8 +125,16 @@ export function getProjectTasks() {
   return apiRequest<ProjectTask[]>("/projects/tasks");
 }
 
+export function getProjectTask(taskId: string) {
+  return apiRequest<ProjectTask>(`/projects/tasks/${taskId}`);
+}
+
 export function getProjectRiskFlags() {
   return apiRequest<ProjectRiskFlag[]>("/projects/risk-flags");
+}
+
+export function getProjectRiskFlag(riskFlagId: string) {
+  return apiRequest<ProjectRiskFlag>(`/projects/risk-flags/${riskFlagId}`);
 }
 
 export function updateProjectTaskStatus(taskId: string, input: { status: "suggested" | "open" | "in_progress" | "done" }) {
@@ -203,6 +211,12 @@ export function createProjectDocumentUploadIntent(
 
 export function getProjectDocumentDownloadUrl(projectId: string, documentId: string) {
   return apiRequest<{ url: string }>(`/projects/${projectId}/documents/${documentId}/download-url`);
+}
+
+export function reprocessProjectDocument(projectId: string, documentId: string) {
+  return apiRequest<ProjectDocument>(`/projects/${projectId}/documents/${documentId}/reprocess`, {
+    method: "POST"
+  });
 }
 
 export function bulkUpdateProjectStatus(input: {

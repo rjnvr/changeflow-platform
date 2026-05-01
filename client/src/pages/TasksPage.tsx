@@ -175,6 +175,12 @@ export function TasksPage() {
                       </ButtonBase>
                     ))}
                     <ButtonBase
+                      onClick={() => navigate(`/app/tasks/${task.id}`)}
+                      sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
+                    >
+                      <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>Details</Typography>
+                    </ButtonBase>
+                    <ButtonBase
                       onClick={() => navigate(`/app/projects/${task.projectId}`)}
                       sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
                     >

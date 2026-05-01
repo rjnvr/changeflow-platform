@@ -20,8 +20,10 @@ import { NotFoundPage } from "../pages/NotFoundPage";
 import { ProjectDetailsPage } from "../pages/ProjectDetailsPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ResourcesPage } from "../pages/ResourcesPage";
+import { RiskFlagDetailsPage } from "../pages/RiskFlagDetailsPage";
 import { SchedulePage } from "../pages/SchedulePage";
 import { TeamPage } from "../pages/TeamPage";
+import { TaskDetailsPage } from "../pages/TaskDetailsPage";
 import { TasksPage } from "../pages/TasksPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -42,6 +44,8 @@ const router = createBrowserRouter(
           <Route path="budget" element={<BudgetPage />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="tasks/:taskId" element={<TaskDetailsPage />} />
+          <Route path="risk-flags/:riskFlagId" element={<RiskFlagDetailsPage />} />
           <Route path="team" element={<TeamPage />} />
           <Route path="directory" element={<DirectoryPage />} />
           <Route path="resources" element={<ResourcesPage />} />

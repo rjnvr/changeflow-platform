@@ -51,10 +51,54 @@ CREATE TABLE IF NOT EXISTS "DocumentChunk" (
   "documentId" TEXT NOT NULL,
   "chunkIndex" INTEGER NOT NULL,
   "content" TEXT NOT NULL,
+  "embeddingJson" TEXT,
+  "embeddingModel" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "DocumentChunk_pkey" PRIMARY KEY ("id")
 );
+
+CREATE TABLE IF NOT EXISTS "AgentRun" (
+  "id" TEXT NOT NULL,
+  "projectId" TEXT NOT NULL,
+  "documentId" TEXT,
+  "trigger" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'running',
+  "summary" TEXT,
+  "model" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AgentRun_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "AgentStep" (
+  "id" TEXT NOT NULL,
+  "runId" TEXT NOT NULL,
+  "stepType" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'completed',
+  "title" TEXT NOT NULL,
+  "details" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AgentStep_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "AgentMemoryEntry" (
+  "id" TEXT NOT NULL,
+  "projectId" TEXT NOT NULL,
+  "documentId" TEXT,
+  "runId" TEXT,
+  "kind" TEXT NOT NULL,
+  "title" TEXT NOT NULL,
+  "content" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AgentMemoryEntry_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "DocumentChunk"
+ADD COLUMN IF NOT EXISTS "embeddingJson" TEXT,
+ADD COLUMN IF NOT EXISTS "embeddingModel" TEXT;
 
 CREATE INDEX IF NOT EXISTS "ProjectTask_projectId_idx" ON "ProjectTask"("projectId");
 CREATE INDEX IF NOT EXISTS "ProjectRiskFlag_projectId_idx" ON "ProjectRiskFlag"("projectId");
@@ -62,6 +106,12 @@ CREATE INDEX IF NOT EXISTS "DocumentProcessingRun_projectId_idx" ON "DocumentPro
 CREATE INDEX IF NOT EXISTS "DocumentProcessingRun_documentId_idx" ON "DocumentProcessingRun"("documentId");
 CREATE INDEX IF NOT EXISTS "DocumentChunk_projectId_idx" ON "DocumentChunk"("projectId");
 CREATE INDEX IF NOT EXISTS "DocumentChunk_documentId_idx" ON "DocumentChunk"("documentId");
+CREATE INDEX IF NOT EXISTS "AgentRun_projectId_idx" ON "AgentRun"("projectId");
+CREATE INDEX IF NOT EXISTS "AgentRun_documentId_idx" ON "AgentRun"("documentId");
+CREATE INDEX IF NOT EXISTS "AgentStep_runId_idx" ON "AgentStep"("runId");
+CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_projectId_idx" ON "AgentMemoryEntry"("projectId");
+CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_documentId_idx" ON "AgentMemoryEntry"("documentId");
+CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_runId_idx" ON "AgentMemoryEntry"("runId");
 
 DO $$
 BEGIN
@@ -71,6 +121,72 @@ BEGIN
     ALTER TABLE "ProjectTask"
       ADD CONSTRAINT "ProjectTask_projectId_fkey"
       FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentRun_projectId_fkey'
+  ) THEN
+    ALTER TABLE "AgentRun"
+      ADD CONSTRAINT "AgentRun_projectId_fkey"
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentRun_documentId_fkey'
+  ) THEN
+    ALTER TABLE "AgentRun"
+      ADD CONSTRAINT "AgentRun_documentId_fkey"
+      FOREIGN KEY ("documentId") REFERENCES "ProjectDocument"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentStep_runId_fkey'
+  ) THEN
+    ALTER TABLE "AgentStep"
+      ADD CONSTRAINT "AgentStep_runId_fkey"
+      FOREIGN KEY ("runId") REFERENCES "AgentRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentMemoryEntry_projectId_fkey'
+  ) THEN
+    ALTER TABLE "AgentMemoryEntry"
+      ADD CONSTRAINT "AgentMemoryEntry_projectId_fkey"
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentMemoryEntry_documentId_fkey'
+  ) THEN
+    ALTER TABLE "AgentMemoryEntry"
+      ADD CONSTRAINT "AgentMemoryEntry_documentId_fkey"
+      FOREIGN KEY ("documentId") REFERENCES "ProjectDocument"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentMemoryEntry_runId_fkey'
+  ) THEN
+    ALTER TABLE "AgentMemoryEntry"
+      ADD CONSTRAINT "AgentMemoryEntry_runId_fkey"
+      FOREIGN KEY ("runId") REFERENCES "AgentRun"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
 

@@ -21,6 +21,7 @@ const projectRiskFlagClient = (prisma as unknown as {
     create(args: unknown): Promise<ProjectRiskFlagRow>;
     findFirst(args: unknown): Promise<ProjectRiskFlagRow | null>;
     update(args: unknown): Promise<ProjectRiskFlagRow>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
   };
 }).projectRiskFlag;
 
@@ -66,6 +67,14 @@ export const projectRiskFlagRepository = {
 
     return riskFlags.map(mapProjectRiskFlag);
   },
+  async findById(riskFlagId: string) {
+    const riskFlag = await projectRiskFlagClient.findFirst({
+      where: { id: riskFlagId },
+      include: includeProject
+    });
+
+    return riskFlag ? mapProjectRiskFlag(riskFlag) : null;
+  },
   async create(input: Omit<ProjectRiskFlagRecord, "id" | "createdAt" | "updatedAt">) {
     const riskFlag = await projectRiskFlagClient.create({
       data: {
@@ -99,5 +108,14 @@ export const projectRiskFlagRepository = {
     });
 
     return mapProjectRiskFlag(riskFlag);
+  },
+  async deleteAgentRiskFlagsForDocument(projectId: string, documentId: string) {
+    await projectRiskFlagClient.deleteMany({
+      where: {
+        projectId,
+        sourceDocumentId: documentId,
+        createdByAgent: true
+      }
+    });
   }
 };

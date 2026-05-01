@@ -125,12 +125,50 @@ export interface DocumentProcessingRunRecord {
   updatedAt: string;
 }
 
+export interface AgentStepRecord {
+  id: string;
+  runId: string;
+  stepType: string;
+  status: string;
+  title: string;
+  details?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentRunRecord {
+  id: string;
+  projectId: string;
+  documentId?: string;
+  trigger: string;
+  status: string;
+  summary?: string;
+  model?: string;
+  steps: AgentStepRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentMemoryEntryRecord {
+  id: string;
+  projectId: string;
+  documentId?: string;
+  runId?: string;
+  kind: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DocumentChunkRecord {
   id: string;
   projectId: string;
   documentId: string;
   chunkIndex: number;
   content: string;
+  embedding?: number[];
+  embeddingModel?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -139,6 +177,8 @@ export interface ProjectAgentWorkspaceRecord {
   tasks: ProjectTaskRecord[];
   riskFlags: ProjectRiskFlagRecord[];
   processingRuns: DocumentProcessingRunRecord[];
+  agentRuns: AgentRunRecord[];
+  memoryEntries: AgentMemoryEntryRecord[];
 }
 
 export interface ProjectQuestionAnswerRecord {
