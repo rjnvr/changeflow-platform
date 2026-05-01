@@ -71,6 +71,10 @@ export interface ProjectDocumentRecord {
   title: string;
   kind: string;
   summary: string;
+  aiSummary?: string;
+  agentStatus: string;
+  processingError?: string;
+  lastProcessedAt?: string;
   assignedTo?: string;
   url?: string;
   storageKey?: string;
@@ -79,6 +83,73 @@ export interface ProjectDocumentRecord {
   fileSize?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectTaskRecord {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  sourceDocumentId?: string;
+  title: string;
+  description: string;
+  status: string;
+  assignedTo?: string;
+  createdByAgent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectRiskFlagRecord {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  sourceDocumentId?: string;
+  level: string;
+  title: string;
+  description: string;
+  status: string;
+  createdByAgent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentProcessingRunRecord {
+  id: string;
+  projectId: string;
+  documentId: string;
+  status: string;
+  extractionMethod: string;
+  extractedTextChars?: number;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentChunkRecord {
+  id: string;
+  projectId: string;
+  documentId: string;
+  chunkIndex: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectAgentWorkspaceRecord {
+  tasks: ProjectTaskRecord[];
+  riskFlags: ProjectRiskFlagRecord[];
+  processingRuns: DocumentProcessingRunRecord[];
+}
+
+export interface ProjectQuestionAnswerRecord {
+  answer: string;
+  citations: Array<{
+    documentId: string;
+    documentTitle: string;
+    chunkIndex: number;
+    excerpt: string;
+  }>;
+  source: "claude" | "fallback";
 }
 
 export interface ProjectAnalyticsBriefRecord {

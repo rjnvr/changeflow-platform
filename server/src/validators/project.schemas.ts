@@ -98,3 +98,21 @@ export const bulkUpdateProjectStatusSchema = z.object({
     status: z.enum(["active", "on-hold", "completed"])
   })
 });
+
+export const askProjectQuestionSchema = z.object({
+  body: z.object({
+    question: z.string().min(8).max(500)
+  })
+});
+
+export const updateProjectTaskStatusSchema = z.object({
+  body: z.object({
+    status: z.enum(["suggested", "open", "in_progress", "done"])
+  })
+});
+
+export const updateProjectRiskFlagStatusSchema = z.object({
+  body: z.object({
+    status: z.enum(["open", "reviewed", "mitigated"])
+  })
+});

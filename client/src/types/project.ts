@@ -52,6 +52,10 @@ export interface ProjectDocument {
   title: string;
   kind: string;
   summary: string;
+  aiSummary?: string;
+  agentStatus: string;
+  processingError?: string;
+  lastProcessedAt?: string;
   assignedTo?: string;
   url?: string;
   storageKey?: string;
@@ -93,4 +97,64 @@ export interface ProjectAnalyticsBrief {
   usage: ProjectAnalyticsUsage;
   source: "claude" | "fallback";
   generatedAt: string;
+}
+
+export type ProjectTaskStatus = "suggested" | "open" | "in_progress" | "done";
+export type ProjectRiskFlagStatus = "open" | "reviewed" | "mitigated";
+
+export interface ProjectTask {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  sourceDocumentId?: string;
+  title: string;
+  description: string;
+  status: ProjectTaskStatus;
+  assignedTo?: string;
+  createdByAgent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectRiskFlag {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  sourceDocumentId?: string;
+  level: string;
+  title: string;
+  description: string;
+  status: ProjectRiskFlagStatus;
+  createdByAgent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentProcessingRun {
+  id: string;
+  projectId: string;
+  documentId: string;
+  status: string;
+  extractionMethod: string;
+  extractedTextChars?: number;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectAgentWorkspace {
+  tasks: ProjectTask[];
+  riskFlags: ProjectRiskFlag[];
+  processingRuns: DocumentProcessingRun[];
+}
+
+export interface ProjectQuestionAnswer {
+  answer: string;
+  citations: Array<{
+    documentId: string;
+    documentTitle: string;
+    chunkIndex: number;
+    excerpt: string;
+  }>;
+  source: "claude" | "fallback";
 }

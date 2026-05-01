@@ -22,6 +22,7 @@ import { ProjectsPage } from "../pages/ProjectsPage";
 import { ResourcesPage } from "../pages/ResourcesPage";
 import { SchedulePage } from "../pages/SchedulePage";
 import { TeamPage } from "../pages/TeamPage";
+import { TasksPage } from "../pages/TasksPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 const router = createBrowserRouter(
@@ -40,6 +41,7 @@ const router = createBrowserRouter(
           <Route path="change-orders/:changeOrderId" element={<ChangeOrderDetailsPage />} />
           <Route path="budget" element={<BudgetPage />} />
           <Route path="schedule" element={<SchedulePage />} />
+          <Route path="tasks" element={<TasksPage />} />
           <Route path="team" element={<TeamPage />} />
           <Route path="directory" element={<DirectoryPage />} />
           <Route path="resources" element={<ResourcesPage />} />

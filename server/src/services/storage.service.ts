@@ -147,6 +147,38 @@ export const storageService = {
       expiresIn: 60 * 10
     });
   },
+  async getObjectText(storageKey: string) {
+    assertStorageConfigured();
+
+    const response = await getStorageClient().send(
+      new GetObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: storageKey
+      })
+    );
+
+    if (!response.Body) {
+      throw new ApiError(404, "Storage object body was empty.");
+    }
+
+    return response.Body.transformToString();
+  },
+  async getObjectBuffer(storageKey: string) {
+    assertStorageConfigured();
+
+    const response = await getStorageClient().send(
+      new GetObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: storageKey
+      })
+    );
+
+    if (!response.Body) {
+      throw new ApiError(404, "Storage object body was empty.");
+    }
+
+    return response.Body.transformToByteArray();
+  },
   async deleteObject(storageKey: string) {
     if (!this.isConfigured() || !storageKey.trim()) {
       return;

@@ -51,6 +51,14 @@ const fieldStyles = {
 const kindOptions = ["PDF", "Drawing", "Quote", "Report", "Photo Set", "Spec"] as const;
 const AUTO_ASSIGN_OPTION = "__AUTO_ASSIGN__";
 
+function titleFromFileName(fileName: string) {
+  return fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getUploadErrorMessage(fileName: string, error: unknown) {
   if (error instanceof TypeError) {
     return `The browser could not upload ${fileName}. Check your S3 bucket CORS settings for http://localhost:5173.`;
@@ -147,8 +155,17 @@ export function ProjectDocumentVaultModal({
     const nextFile = event.target.files?.[0] ?? null;
 
     setFile(nextFile);
+    setError("");
 
     if (nextFile) {
+      if (!title.trim()) {
+        setTitle(titleFromFileName(nextFile.name));
+      }
+
+      if (!summary.trim()) {
+        setSummary(`Uploaded document ${nextFile.name} for ${project.name}.`);
+      }
+
       setUrl("");
     }
   }
@@ -169,8 +186,16 @@ export function ProjectDocumentVaultModal({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (title.trim().length < 2 || summary.trim().length < 10) {
-      setError("Add a document title and a short summary.");
+    const trimmedTitle = title.trim();
+    const trimmedSummary = summary.trim();
+
+    if (trimmedTitle.length < 2) {
+      setError("Add a document title with at least 2 characters.");
+      return;
+    }
+
+    if (trimmedSummary.length < 6) {
+      setError("Add a short summary with at least 6 characters.");
       return;
     }
 
@@ -220,9 +245,9 @@ export function ProjectDocumentVaultModal({
       }
 
       await createProjectDocument(project.id, {
-        title: title.trim(),
+        title: trimmedTitle,
         kind,
-        summary: summary.trim(),
+        summary: trimmedSummary,
         assignedTo: assignedTo === AUTO_ASSIGN_OPTION ? undefined : assignedTo,
         url: file ? undefined : url.trim() || undefined,
         storageKey: nextStorageKey,
@@ -405,6 +430,24 @@ export function ProjectDocumentVaultModal({
                             >
                               {document.assignedTo ? `Assigned to ${document.assignedTo}` : "Auto-assignment pending"}
                             </Typography>
+                            <Typography
+                              sx={{
+                                mt: 0.45,
+                                fontSize: "0.72rem",
+                                fontWeight: 900,
+                                letterSpacing: 1.3,
+                                textTransform: "uppercase",
+                                color:
+                                  document.agentStatus === "completed"
+                                    ? "#046B5E"
+                                    : document.agentStatus === "failed"
+                                      ? "#872000"
+                                      : "#7A869F"
+                              }}
+                            >
+                              Agent {document.agentStatus}
+                              {document.lastProcessedAt ? ` • ${formatDate(document.lastProcessedAt)}` : ""}
+                            </Typography>
                           </Box>
 
                           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -472,6 +515,16 @@ export function ProjectDocumentVaultModal({
                         <Typography sx={{ mt: 1.4, fontSize: "0.98rem", lineHeight: 1.65, color: "#5A6A84" }}>
                           {document.summary}
                         </Typography>
+                        {document.aiSummary && document.aiSummary !== document.summary ? (
+                          <Typography sx={{ mt: 1, fontSize: "0.88rem", lineHeight: 1.65, color: "#42536D" }}>
+                            AI brief: {document.aiSummary}
+                          </Typography>
+                        ) : null}
+                        {document.processingError ? (
+                          <Typography sx={{ mt: 1, fontSize: "0.82rem", fontWeight: 700, color: "#872000" }}>
+                            Agent note: {document.processingError}
+                          </Typography>
+                        ) : null}
                         {document.fileName || document.fileSize ? (
                           <Typography sx={{ mt: 1, fontSize: "0.82rem", fontWeight: 700, color: "#7A869F" }}>
                             {[document.fileName, formatFileSize(document.fileSize)].filter(Boolean).join(" • ")}
@@ -595,7 +648,7 @@ export function ProjectDocumentVaultModal({
                     type="file"
                     hidden
                     onChange={handleFileChange}
-                    accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx,.zip"
+                    accept=".pdf,.txt,.md,.csv,.json,.xml,.log,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx,.zip"
                   />
                   <ButtonBase
                     component="label"

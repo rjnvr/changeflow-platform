@@ -7,10 +7,15 @@ import { changeOrderRepository } from "../repositories/changeOrder.repository.js
 import { projectAccessRepository } from "../repositories/projectAccess.repository.js";
 import { projectAccessRequestRepository } from "../repositories/projectAccessRequest.repository.js";
 import { projectBriefGenerationRepository } from "../repositories/projectBriefGeneration.repository.js";
+import { projectRiskFlagRepository } from "../repositories/projectRiskFlag.repository.js";
+import { projectTaskRepository } from "../repositories/projectTask.repository.js";
+import { documentProcessingRunRepository } from "../repositories/documentProcessingRun.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { auditLogService } from "./auditLog.service.js";
 import { projectAccessService } from "./projectAccess.service.js";
 import { aiSummaryService } from "./aiSummary.service.js";
+import { documentAgentService } from "./documentAgent.service.js";
+import { ragService } from "./rag.service.js";
 import { storageService } from "./storage.service.js";
 
 function canEditProject(user: AuthenticatedUser, ownerId: string) {
@@ -252,6 +257,92 @@ export const projectService = {
     await this.getProject(requestUser, projectId);
     return projectDocumentRepository.listByProject(projectId);
   },
+  async getAgentWorkspace(requestUser: AuthenticatedUser, projectId: string) {
+    await this.getProject(requestUser, projectId);
+
+    const [tasks, riskFlags, processingRuns] = await Promise.all([
+      projectTaskRepository.listByProject(projectId),
+      projectRiskFlagRepository.listByProject(projectId),
+      documentProcessingRunRepository.listByProject(projectId)
+    ]);
+
+    return {
+      tasks,
+      riskFlags,
+      processingRuns
+    };
+  },
+  async listProjectTasks(requestUser: AuthenticatedUser) {
+    const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {
+      includeArchived: true
+    });
+    const tasks = await projectTaskRepository.listAll();
+    return tasks.filter((task) => accessibleProjectIds.includes(task.projectId));
+  },
+  async listProjectRiskFlags(requestUser: AuthenticatedUser) {
+    const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {
+      includeArchived: true
+    });
+    const riskFlags = await projectRiskFlagRepository.listAll();
+    return riskFlags.filter((riskFlag) => accessibleProjectIds.includes(riskFlag.projectId));
+  },
+  async updateProjectTaskStatus(
+    requestUser: AuthenticatedUser,
+    taskId: string,
+    input: { status: "suggested" | "open" | "in_progress" | "done" }
+  ) {
+    const tasks = await this.listProjectTasks(requestUser);
+    const existingTask = tasks.find((task) => task.id === taskId);
+
+    if (!existingTask) {
+      throw new ApiError(404, "Task not found.");
+    }
+
+    const updatedTask = await projectTaskRepository.updateStatus(taskId, input.status);
+
+    if (!updatedTask) {
+      throw new ApiError(404, "Task not found.");
+    }
+
+    await auditLogService.record("project.task.status_updated", "projectTask", updatedTask.id, {
+      projectId: updatedTask.projectId,
+      status: updatedTask.status
+    });
+
+    return updatedTask;
+  },
+  async updateProjectRiskFlagStatus(
+    requestUser: AuthenticatedUser,
+    riskFlagId: string,
+    input: { status: "open" | "reviewed" | "mitigated" }
+  ) {
+    const riskFlags = await this.listProjectRiskFlags(requestUser);
+    const existingRiskFlag = riskFlags.find((riskFlag) => riskFlag.id === riskFlagId);
+
+    if (!existingRiskFlag) {
+      throw new ApiError(404, "Risk flag not found.");
+    }
+
+    const updatedRiskFlag = await projectRiskFlagRepository.updateStatus(riskFlagId, input.status);
+
+    if (!updatedRiskFlag) {
+      throw new ApiError(404, "Risk flag not found.");
+    }
+
+    await auditLogService.record("project.risk_flag.status_updated", "projectRiskFlag", updatedRiskFlag.id, {
+      projectId: updatedRiskFlag.projectId,
+      status: updatedRiskFlag.status
+    });
+
+    return updatedRiskFlag;
+  },
+  async askProjectQuestion(requestUser: AuthenticatedUser, projectId: string, input: { question: string }) {
+    await this.getProject(requestUser, projectId);
+    return ragService.answerProjectQuestion({
+      projectId,
+      question: input.question.trim()
+    });
+  },
   async addDocument(
     user: AuthenticatedUser,
     projectId: string,
@@ -285,6 +376,10 @@ export const projectService = {
       title: input.title,
       kind: input.kind,
       summary: input.summary,
+      aiSummary: undefined,
+      agentStatus: "queued",
+      processingError: undefined,
+      lastProcessedAt: undefined,
       assignedTo,
       url: input.url?.trim() ? input.url.trim() : undefined,
       storageKey: input.storageKey,
@@ -300,7 +395,11 @@ export const projectService = {
       assignedTo: document.assignedTo
     });
 
-    return document;
+    return documentAgentService.processProjectDocument({
+      project,
+      document,
+      teamMembers
+    });
   },
   async updateDocument(
     user: AuthenticatedUser,

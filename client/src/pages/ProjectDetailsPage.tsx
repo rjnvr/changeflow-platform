@@ -16,12 +16,21 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { archiveProject, deleteProjectTeamMember, generateProjectBrief, getProject } from "../api/projects";
+import {
+  archiveProject,
+  askProjectQuestion,
+  deleteProjectTeamMember,
+  generateProjectBrief,
+  getProject,
+  getProjectAgentWorkspace
+} from "../api/projects";
 import { WorkspaceBreadcrumbs } from "../components/layout/WorkspaceBreadcrumbs";
 import { AddTeamMemberModal } from "../components/projects/AddTeamMemberModal";
+import { AgentWorkspaceModal } from "../components/projects/AgentWorkspaceModal";
 import { EditProjectModal } from "../components/projects/EditProjectModal";
 import { ProjectDocumentVaultModal } from "../components/projects/ProjectDocumentVaultModal";
 import { useAuthContext } from "../context/AuthContext";
@@ -29,7 +38,16 @@ import { useFeedbackContext } from "../context/FeedbackContext";
 import { useChangeOrders } from "../hooks/useChangeOrders";
 import { useProjectDocuments } from "../hooks/useProjectDocuments";
 import { useProjectTeamMembers } from "../hooks/useProjectTeamMembers";
-import type { Project, ProjectAnalyticsBrief, ProjectTeamMember } from "../types/project";
+import type {
+  DocumentProcessingRun,
+  Project,
+  ProjectAgentWorkspace,
+  ProjectAnalyticsBrief,
+  ProjectRiskFlag,
+  ProjectQuestionAnswer,
+  ProjectTask,
+  ProjectTeamMember
+} from "../types/project";
 import type { ChangeOrder } from "../types/changeOrder";
 import { PROJECT_ANALYTICS_BRIEF_KEY } from "../utils/constants";
 import { formatCurrency } from "../utils/formatCurrency";
@@ -218,10 +236,26 @@ export function ProjectDetailsPage() {
   const [projectBrief, setProjectBrief] = useState<ProjectAnalyticsBrief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
+  const [agentWorkspace, setAgentWorkspace] = useState<ProjectAgentWorkspace | null>(null);
+  const [agentWorkspaceError, setAgentWorkspaceError] = useState<string | null>(null);
+  const [agentWorkspaceOpen, setAgentWorkspaceOpen] = useState(false);
+  const [projectQuestion, setProjectQuestion] = useState("");
+  const [projectQuestionLoading, setProjectQuestionLoading] = useState(false);
+  const [projectQuestionError, setProjectQuestionError] = useState<string | null>(null);
+  const [projectQuestionAnswer, setProjectQuestionAnswer] = useState<ProjectQuestionAnswer | null>(null);
   const [selectedTeamMember, setSelectedTeamMember] = useState<ProjectTeamMember | null>(null);
   const { changeOrders } = useChangeOrders(projectId, { includeArchived: true });
   const { teamMembers, error: teamError, refresh: refreshTeamMembers } = useProjectTeamMembers(projectId);
   const { documents, error: documentError, refresh: refreshDocuments } = useProjectDocuments(projectId);
+
+  async function refreshAgentWorkspace() {
+    try {
+      setAgentWorkspaceError(null);
+      setAgentWorkspace(await getProjectAgentWorkspace(projectId));
+    } catch (requestError) {
+      setAgentWorkspaceError(requestError instanceof Error ? requestError.message : "Unable to load agent workspace.");
+    }
+  }
 
   useEffect(() => {
     setProjectBrief(null);
@@ -238,6 +272,11 @@ export function ProjectDetailsPage() {
       setProjectBrief(storedBrief);
     }
   }, [projectId, user?.id]);
+
+  useEffect(() => {
+    setAgentWorkspace(null);
+    void refreshAgentWorkspace();
+  }, [projectId]);
 
   if (error) {
     return <Alert severity="error">{error}</Alert>;
@@ -257,6 +296,8 @@ export function ProjectDetailsPage() {
     documents.length > 0
       ? documents.slice(0, 2).map((document) => ({
           title: document.title,
+          aiSummary: document.aiSummary,
+          status: document.agentStatus,
           subtitle: document.assignedTo
             ? `Assigned to ${document.assignedTo} • Updated ${formatDate(document.updatedAt)}`
             : `Updated ${formatDate(document.updatedAt)}`,
@@ -270,10 +311,15 @@ export function ProjectDetailsPage() {
       : [
           {
             title: "No project documents yet",
+            aiSummary: undefined,
+            status: "idle",
             subtitle: "Open the vault to add the first file reference",
             icon: <DescriptionRoundedIcon sx={{ color: "#046B5E" }} />
           }
         ];
+  const projectTasks = agentWorkspace?.tasks ?? [];
+  const projectRiskFlags = agentWorkspace?.riskFlags ?? [];
+  const latestProcessingRuns = agentWorkspace?.processingRuns.slice(0, 3) ?? [];
   const impactValue = changeOrders.reduce((total, item) => total + item.amount, 0);
   const utilization = Math.min(64 + changeOrders.length * 4, 92);
 
@@ -299,6 +345,36 @@ export function ProjectDetailsPage() {
     }
   }
 
+  async function handleAskProjectQuestion() {
+    if (projectQuestion.trim().length < 8) {
+      setProjectQuestionError("Ask a more specific question so the system can retrieve the right project context.");
+      return;
+    }
+
+    setProjectQuestionLoading(true);
+    setProjectQuestionError(null);
+
+    try {
+      const answer = await askProjectQuestion(projectId, {
+        question: projectQuestion.trim()
+      });
+      setProjectQuestionAnswer(answer);
+      showToast({
+        message:
+          answer.source === "claude"
+            ? "Grounded project answer generated from the latest document evidence."
+            : "Project answer generated using the local fallback retrieval.",
+        severity: answer.source === "claude" ? "success" : "info"
+      });
+    } catch (requestError) {
+      setProjectQuestionError(
+        requestError instanceof Error ? requestError.message : "Unable to answer this project question."
+      );
+    } finally {
+      setProjectQuestionLoading(false);
+    }
+  }
+
   return (
     <Stack
       spacing={4.5}
@@ -311,6 +387,7 @@ export function ProjectDetailsPage() {
       {project.archivedAt ? <Alert severity="warning">This project is archived and read-only.</Alert> : null}
       {teamError ? <Alert severity="warning">{teamError}</Alert> : null}
       {documentError ? <Alert severity="warning">{documentError}</Alert> : null}
+      {agentWorkspaceError ? <Alert severity="warning">{agentWorkspaceError}</Alert> : null}
 
       <WorkspaceBreadcrumbs
         items={[
@@ -491,6 +568,266 @@ export function ProjectDetailsPage() {
               <ShieldRoundedIcon sx={{ fontSize: 34, color: "#046B5E" }} />
             </Box>
           </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 5,
+              backgroundColor: "#FFFFFF",
+              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              spacing={2}
+              sx={{ mb: 3 }}
+            >
+              <Box>
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "1.8rem",
+                    fontWeight: 800,
+                    letterSpacing: -1,
+                    color: "#00342B"
+                  }}
+                >
+                  Ask This Project
+                </Typography>
+                <Typography sx={{ mt: 0.8, fontSize: "0.98rem", lineHeight: 1.65, color: "#5A6A84", maxWidth: 760 }}>
+                  Ask a grounded question over uploaded project documents. The answer uses stored document chunks and cites the exact evidence it found.
+                </Typography>
+              </Box>
+              <ButtonBase
+                onClick={() => setAgentWorkspaceOpen(true)}
+                sx={{
+                  px: 2.4,
+                  py: 1.2,
+                  borderRadius: 2.5,
+                  backgroundColor: "#E6F6FF",
+                  color: "#00342B"
+                }}
+              >
+                <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>Open Agent Workspace</Typography>
+              </ButtonBase>
+            </Stack>
+
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "flex-start" }}>
+              <TextField
+                value={projectQuestion}
+                onChange={(event) => setProjectQuestion(event.target.value)}
+                placeholder="What changed in this project that could affect the current budget or schedule?"
+                multiline
+                minRows={3}
+                fullWidth
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    backgroundColor: "#F9FCFF"
+                  }
+                }}
+              />
+              <ButtonBase
+                onClick={() => void handleAskProjectQuestion()}
+                disabled={projectQuestionLoading}
+                sx={{
+                  minWidth: 190,
+                  px: 2.5,
+                  py: 1.6,
+                  borderRadius: 3,
+                  backgroundColor: "#00342B",
+                  color: "#FFFFFF",
+                  alignSelf: { xs: "stretch", md: "auto" },
+                  opacity: projectQuestionLoading ? 0.65 : 1
+                }}
+              >
+                <Stack spacing={0.3} alignItems="center">
+                  <Typography sx={{ fontSize: "0.88rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                    {projectQuestionLoading ? "Thinking..." : "Ask Project"}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.74)" }}>
+                    Grounded answer
+                  </Typography>
+                </Stack>
+              </ButtonBase>
+            </Stack>
+
+            {projectQuestionError ? <Alert severity="warning" sx={{ mt: 2.5 }}>{projectQuestionError}</Alert> : null}
+
+            {projectQuestionAnswer ? (
+              <Paper
+                elevation={0}
+                sx={{
+                  mt: 3,
+                  p: 3,
+                  borderRadius: 4,
+                  backgroundColor: "#F9FCFF",
+                  border: "1px solid rgba(213,236,248,0.95)"
+                }}
+              >
+                <Typography sx={{ fontSize: "1rem", lineHeight: 1.75, color: "#00342B" }}>
+                  {projectQuestionAnswer.answer}
+                </Typography>
+                <Stack spacing={1.5} sx={{ mt: 2.5 }}>
+                  {projectQuestionAnswer.citations.map((citation) => (
+                    <Paper
+                      key={`${citation.documentId}-${citation.chunkIndex}`}
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        borderRadius: 3,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.82)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.82rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {citation.documentTitle} • chunk {citation.chunkIndex + 1}
+                      </Typography>
+                      <Typography sx={{ mt: 0.85, fontSize: "0.9rem", lineHeight: 1.65, color: "#42536D" }}>
+                        {citation.excerpt}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            ) : null}
+          </Paper>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1fr) minmax(280px, 0.9fr)" },
+              gap: 3
+            }}
+          >
+            <Paper
+              elevation={0}
+              sx={{
+                p: 4,
+                borderRadius: 5,
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "1.8rem",
+                    fontWeight: 800,
+                    letterSpacing: -1,
+                    color: "#00342B"
+                  }}
+                >
+                  Agent Tasks
+                </Typography>
+                <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+              </Stack>
+
+              {projectTasks.length > 0 ? (
+                <Stack spacing={2}>
+                  {projectTasks.slice(0, 4).map((task: ProjectTask) => (
+                    <Paper
+                      key={task.id}
+                      elevation={0}
+                      sx={{
+                        p: 2.2,
+                        borderRadius: 3.5,
+                        backgroundColor: "#F9FCFF",
+                        border: "1px solid rgba(213,236,248,0.9)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{task.title}</Typography>
+                      <Typography sx={{ mt: 0.8, fontSize: "0.94rem", lineHeight: 1.6, color: "#42536D" }}>
+                        {task.description}
+                      </Typography>
+                      <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" sx={{ mt: 1.4 }}>
+                        <Typography sx={{ fontSize: "0.78rem", fontWeight: 800, letterSpacing: 1.3, textTransform: "uppercase", color: "#93A6C3" }}>
+                          {task.status}
+                        </Typography>
+                        {task.assignedTo ? (
+                          <Typography sx={{ fontSize: "0.82rem", color: "#046B5E", fontWeight: 700 }}>
+                            Assigned to {task.assignedTo}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography sx={{ fontSize: "0.98rem", lineHeight: 1.7, color: "#5A6A84" }}>
+                  Upload or link a project document and the document agent will create actionable follow-up tasks here.
+                </Typography>
+              )}
+              {projectTasks.length > 0 ? (
+                <ButtonBase
+                  onClick={() => setAgentWorkspaceOpen(true)}
+                  sx={{ mt: 2.5, color: "#046B5E" }}
+                >
+                  <Typography sx={{ fontSize: "0.94rem", fontWeight: 800 }}>Open Agent Tasks</Typography>
+                </ButtonBase>
+              ) : null}
+            </Paper>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: 4,
+                borderRadius: 5,
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "1.8rem",
+                    fontWeight: 800,
+                    letterSpacing: -1,
+                    color: "#00342B"
+                  }}
+                >
+                  Risk Flags
+                </Typography>
+                <WarningAmberRoundedIcon sx={{ color: "#7A1E08" }} />
+              </Stack>
+
+              {projectRiskFlags.length > 0 ? (
+                <Stack spacing={2}>
+                  {projectRiskFlags.slice(0, 4).map((riskFlag: ProjectRiskFlag) => (
+                    <Paper
+                      key={riskFlag.id}
+                      elevation={0}
+                      sx={{
+                        p: 2.2,
+                        borderRadius: 3.5,
+                        backgroundColor: "#FFF6F1",
+                        border: "1px solid rgba(255,219,209,0.95)"
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                        <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#7A1E08" }}>{riskFlag.title}</Typography>
+                        <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.4, textTransform: "uppercase", color: "#872000" }}>
+                          {riskFlag.level}
+                        </Typography>
+                      </Stack>
+                      <Typography sx={{ mt: 0.8, fontSize: "0.94rem", lineHeight: 1.6, color: "#6B412C" }}>
+                        {riskFlag.description}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography sx={{ fontSize: "0.98rem", lineHeight: 1.7, color: "#5A6A84" }}>
+                  No agent-generated risk flags yet. The first uploaded document with scope, cost, or schedule signal will surface here.
+                </Typography>
+              )}
+            </Paper>
+          </Box>
         </Stack>
       </Box>
 
@@ -977,9 +1314,19 @@ export function ProjectDetailsPage() {
                   </Box>
                   <Box>
                     <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{document.title}</Typography>
+                    {document.aiSummary ? (
+                      <Typography sx={{ mt: 0.65, fontSize: "0.88rem", lineHeight: 1.55, color: "#42536D" }}>
+                        {document.aiSummary}
+                      </Typography>
+                    ) : null}
                     <Typography sx={{ mt: 0.6, fontSize: "0.76rem", fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#93A6C3" }}>
                       {document.subtitle}
                     </Typography>
+                    {document.status ? (
+                      <Typography sx={{ mt: 0.45, fontSize: "0.72rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: document.status === "completed" ? "#046B5E" : document.status === "failed" ? "#872000" : "#5A6A84" }}>
+                        Agent {document.status}
+                      </Typography>
+                    ) : null}
                   </Box>
                 </Paper>
               ))}
@@ -1160,7 +1507,13 @@ export function ProjectDetailsPage() {
                     backgroundColor: "#42536D",
                     title: "Weekly Progress Photo uploaded",
                     body: "Yesterday by Site Drone"
-                  }
+                  },
+                  ...latestProcessingRuns.map((run: DocumentProcessingRun) => ({
+                    icon: <AutoAwesomeRoundedIcon sx={{ color: "#FFFFFF", fontSize: 16 }} />,
+                    backgroundColor: run.status === "failed" ? "#7A1E08" : "#046B5E",
+                    title: `Document agent ${run.status}`,
+                    body: `${run.extractionMethod.replace(/_/g, " ")} • ${formatDateTime(run.updatedAt)}`
+                  }))
                 ].map((item) => (
                   <Stack key={item.title} direction="row" spacing={1.8}>
                     <Box
@@ -1272,11 +1625,19 @@ export function ProjectDetailsPage() {
         onClose={() => setDocumentVaultOpen(false)}
         onCreated={async () => {
           await refreshDocuments();
+          await refreshAgentWorkspace();
           showToast({
             message: "Project vault updated.",
             severity: "success"
           });
         }}
+      />
+      <AgentWorkspaceModal
+        open={agentWorkspaceOpen}
+        onClose={() => setAgentWorkspaceOpen(false)}
+        tasks={projectTasks}
+        riskFlags={projectRiskFlags}
+        processingRuns={agentWorkspace?.processingRuns ?? []}
       />
     </Stack>
   );

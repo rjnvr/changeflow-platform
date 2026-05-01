@@ -3,6 +3,7 @@ import { logger } from "../config/logger.js";
 import type {
   ChangeOrderRecord,
   ProjectAnalyticsBriefRecord,
+  ProjectQuestionAnswerRecord,
   ProjectDocumentRecord,
   ProjectRecord,
   ProjectTeamMemberRecord
@@ -168,6 +169,180 @@ function buildProjectBriefPrompt(input: {
   ].join("\n");
 }
 
+type ProjectDocumentAgentAnalysis = {
+  summary: string;
+  suggestedAssignee?: string;
+  actionItems: Array<{
+    title: string;
+    description: string;
+    assignee?: string;
+  }>;
+  keyRisks: Array<{
+    level: "low" | "medium" | "high";
+    title: string;
+    description: string;
+  }>;
+  source: "claude" | "fallback";
+};
+
+function buildProjectDocumentAgentFallback(input: {
+  project: ProjectRecord;
+  document: ProjectDocumentRecord;
+  teamMembers: ProjectTeamMemberRecord[];
+  changeOrders: ChangeOrderRecord[];
+  extractedText?: string;
+}): ProjectDocumentAgentAnalysis {
+  const normalizedText = `${input.document.title} ${input.document.kind} ${input.document.summary} ${input.extractedText ?? ""}`.toLowerCase();
+  const matchedAssignee =
+    input.teamMembers.find((member) =>
+      ["draw", "layout", "architect", "design", "spec"].some(
+        (keyword) => normalizedText.includes(keyword) && member.role.toLowerCase().includes("architect")
+      )
+    )?.name ?? input.document.assignedTo ?? input.teamMembers[0]?.name;
+
+  const keyRisks: ProjectDocumentAgentAnalysis["keyRisks"] = [];
+
+  if (["delay", "schedule", "late", "hold"].some((keyword) => normalizedText.includes(keyword))) {
+    keyRisks.push({
+      level: "medium",
+      title: "Schedule follow-up required",
+      description: "The document mentions timing or schedule pressure that should be reviewed with the project team."
+    });
+  }
+
+  if (["cost", "price", "change", "invoice", "budget"].some((keyword) => normalizedText.includes(keyword))) {
+    keyRisks.push({
+      level: "high",
+      title: "Potential commercial impact",
+      description: "This document likely affects cost, pricing, or scope and should be validated against current change-order exposure."
+    });
+  }
+
+  const actionItems: ProjectDocumentAgentAnalysis["actionItems"] = [
+    {
+      title: `Review ${input.document.title}`,
+      description: `Review the uploaded ${input.document.kind.toLowerCase()} for project ${input.project.name} and confirm if follow-up change orders or budget actions are required.`,
+      assignee: matchedAssignee
+    }
+  ];
+
+  if (input.changeOrders.length > 0) {
+    actionItems.push({
+      title: "Cross-check against open change orders",
+      description: "Compare this document against current change-order activity to catch duplicate scope, pricing overlap, or missing approvals."
+    });
+  }
+
+  return {
+    summary: `${input.document.title} appears relevant to ${input.project.name} and should be reviewed for operational impact, commercial exposure, and downstream coordination.`,
+    suggestedAssignee: matchedAssignee,
+    actionItems: actionItems.slice(0, 3),
+    keyRisks: keyRisks.slice(0, 3),
+    source: "fallback"
+  };
+}
+
+function buildProjectDocumentAgentPrompt(input: {
+  project: ProjectRecord;
+  document: ProjectDocumentRecord;
+  teamMembers: ProjectTeamMemberRecord[];
+  changeOrders: ChangeOrderRecord[];
+  extractedText?: string;
+}) {
+  const teamRoster = input.teamMembers.map((member) => `- ${member.name} | role=${member.role}`).join("\n");
+  const relatedChangeOrders = input.changeOrders
+    .slice(0, 5)
+    .map(
+      (changeOrder) =>
+        `- ${changeOrder.title} | status=${changeOrder.status} | amount=$${changeOrder.amount.toLocaleString()} | requestedBy=${changeOrder.requestedBy}`
+    )
+    .join("\n");
+
+  return [
+    "You are a construction operations document agent for ChangeFlow.",
+    "Analyze the uploaded project document and produce immediate, useful next actions for the project team.",
+    "Return strict JSON only with this shape:",
+    '{"summary":"string","suggestedAssignee":"string","actionItems":[{"title":"string","description":"string","assignee":"string"}],"keyRisks":[{"level":"low|medium|high","title":"string","description":"string"}]}',
+    "Rules:",
+    "- Keep summary to 2 sentences max.",
+    "- actionItems should contain 1 to 3 items.",
+    "- keyRisks should contain 0 to 3 items.",
+    "- Only suggest assignees from the provided team roster when possible.",
+    "- Focus on operational follow-up a PM could act on immediately.",
+    `Project: ${input.project.name} | code=${input.project.code} | location=${input.project.location} | status=${input.project.status}`,
+    `Document title: ${input.document.title}`,
+    `Document type: ${input.document.kind}`,
+    `Existing manual summary: ${input.document.summary}`,
+    input.extractedText ? `Extracted text:\n${input.extractedText.slice(0, 12000)}` : "Extracted text: unavailable",
+    teamRoster ? `On-site team:\n${teamRoster}` : "On-site team:\n- none",
+    relatedChangeOrders ? `Related change orders:\n${relatedChangeOrders}` : "Related change orders:\n- none"
+  ].join("\n");
+}
+
+function parseProjectDocumentAgentAnalysis(text: string | undefined): Omit<ProjectDocumentAgentAnalysis, "source"> | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const normalizedText = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
+
+  try {
+    const parsed = JSON.parse(normalizedText) as Partial<ProjectDocumentAgentAnalysis>;
+    const actionItems = Array.isArray(parsed.actionItems)
+      ? parsed.actionItems
+          .filter(
+            (item): item is { title: string; description: string; assignee?: string } =>
+              Boolean(item) &&
+              typeof item === "object" &&
+              typeof item.title === "string" &&
+              typeof item.description === "string"
+          )
+          .map((item) => ({
+            title: item.title.trim(),
+            description: item.description.trim(),
+            assignee: typeof item.assignee === "string" && item.assignee.trim() ? item.assignee.trim() : undefined
+          }))
+          .filter((item) => item.title && item.description)
+          .slice(0, 3)
+      : [];
+
+    const keyRisks = Array.isArray(parsed.keyRisks)
+      ? parsed.keyRisks
+          .filter(
+            (item): item is { level: "low" | "medium" | "high"; title: string; description: string } =>
+              Boolean(item) &&
+              typeof item === "object" &&
+              (item.level === "low" || item.level === "medium" || item.level === "high") &&
+              typeof item.title === "string" &&
+              typeof item.description === "string"
+          )
+          .map((item) => ({
+            level: item.level,
+            title: item.title.trim(),
+            description: item.description.trim()
+          }))
+          .filter((item) => item.title && item.description)
+          .slice(0, 3)
+      : [];
+
+    if (typeof parsed.summary !== "string" || parsed.summary.trim().length < 10) {
+      return undefined;
+    }
+
+    return {
+      summary: parsed.summary.trim(),
+      suggestedAssignee:
+        typeof parsed.suggestedAssignee === "string" && parsed.suggestedAssignee.trim()
+          ? parsed.suggestedAssignee.trim()
+          : undefined,
+      actionItems,
+      keyRisks
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 async function requestClaudeText(prompt: string, maxTokens: number) {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: "POST",
@@ -231,6 +406,86 @@ function parseProjectBrief(
       recentProgress: asArray(parsed.recentProgress),
       nextSteps: asArray(parsed.nextSteps),
       watchouts: asArray(parsed.watchouts)
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function buildProjectQuestionFallback(input: {
+  question: string;
+  citations: ProjectQuestionAnswerRecord["citations"];
+}): ProjectQuestionAnswerRecord {
+  const topCitation = input.citations[0];
+
+  return {
+    answer: topCitation
+      ? `Based on ${topCitation.documentTitle}, the most relevant project context is: ${topCitation.excerpt}`
+      : `No grounded document evidence was found for "${input.question}". Upload more project documents to improve project answers.`,
+    citations: input.citations,
+    source: "fallback"
+  };
+}
+
+function buildProjectQuestionPrompt(input: {
+  question: string;
+  citations: ProjectQuestionAnswerRecord["citations"];
+}) {
+  const citationText = input.citations
+    .map(
+      (citation, index) =>
+        `[${index + 1}] ${citation.documentTitle} (chunk ${citation.chunkIndex})\n${citation.excerpt}`
+    )
+    .join("\n\n");
+
+  return [
+    "You are answering a question inside ChangeFlow using grounded project document context.",
+    "Return strict JSON only with this shape:",
+    '{"answer":"string","citations":[{"documentId":"string","documentTitle":"string","chunkIndex":0,"excerpt":"string"}]}',
+    "Rules:",
+    "- Base the answer only on the supplied citations.",
+    "- Keep the answer concise and useful for a project manager.",
+    "- Preserve only citations that truly support the answer.",
+    "- Do not invent facts beyond the cited excerpts.",
+    `Question: ${input.question}`,
+    `Citations:\n${citationText || "none"}`
+  ].join("\n");
+}
+
+function parseProjectQuestionAnswer(
+  text: string | undefined,
+  fallbackCitations: ProjectQuestionAnswerRecord["citations"]
+): Omit<ProjectQuestionAnswerRecord, "source"> | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const normalizedText = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
+
+  try {
+    const parsed = JSON.parse(normalizedText) as Partial<ProjectQuestionAnswerRecord>;
+
+    if (typeof parsed.answer !== "string" || parsed.answer.trim().length < 10) {
+      return undefined;
+    }
+
+    const citations = Array.isArray(parsed.citations)
+      ? parsed.citations
+          .filter(
+            (citation): citation is ProjectQuestionAnswerRecord["citations"][number] =>
+              Boolean(citation) &&
+              typeof citation === "object" &&
+              typeof citation.documentId === "string" &&
+              typeof citation.documentTitle === "string" &&
+              typeof citation.chunkIndex === "number" &&
+              typeof citation.excerpt === "string"
+          )
+          .slice(0, 4)
+      : fallbackCitations;
+
+    return {
+      answer: parsed.answer.trim(),
+      citations
     };
   } catch {
     return undefined;
@@ -305,6 +560,81 @@ export const aiSummaryService = {
       });
 
       return fallbackBrief;
+    }
+  },
+  async analyzeProjectDocument(input: {
+    project: ProjectRecord;
+    document: ProjectDocumentRecord;
+    teamMembers: ProjectTeamMemberRecord[];
+    changeOrders: ChangeOrderRecord[];
+    extractedText?: string;
+  }) {
+    const fallbackAnalysis = buildProjectDocumentAgentFallback(input);
+
+    if (!env.ANTHROPIC_API_KEY) {
+      return fallbackAnalysis;
+    }
+
+    try {
+      const responseText = await requestClaudeText(buildProjectDocumentAgentPrompt(input), 520);
+      const parsedAnalysis = parseProjectDocumentAgentAnalysis(responseText);
+
+      if (!parsedAnalysis) {
+        logger.warn("Claude document agent response was invalid JSON. Falling back to local document analysis.", {
+          model: env.ANTHROPIC_MODEL,
+          response: responseText?.slice(0, 500)
+        });
+
+        return fallbackAnalysis;
+      }
+
+      return {
+        ...parsedAnalysis,
+        source: "claude" as const
+      };
+    } catch (error) {
+      logger.warn("Claude document agent analysis failed. Falling back to local analysis.", {
+        model: env.ANTHROPIC_MODEL,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return fallbackAnalysis;
+    }
+  },
+  async answerProjectQuestion(input: {
+    question: string;
+    citations: ProjectQuestionAnswerRecord["citations"];
+  }) {
+    const fallbackAnswer = buildProjectQuestionFallback(input);
+
+    if (!env.ANTHROPIC_API_KEY) {
+      return fallbackAnswer;
+    }
+
+    try {
+      const responseText = await requestClaudeText(buildProjectQuestionPrompt(input), 420);
+      const parsedAnswer = parseProjectQuestionAnswer(responseText, input.citations);
+
+      if (!parsedAnswer) {
+        logger.warn("Claude project Q&A response was invalid JSON. Falling back to local answer.", {
+          model: env.ANTHROPIC_MODEL,
+          response: responseText?.slice(0, 500)
+        });
+
+        return fallbackAnswer;
+      }
+
+      return {
+        ...parsedAnswer,
+        source: "claude" as const
+      };
+    } catch (error) {
+      logger.warn("Claude project Q&A failed. Falling back to local answer.", {
+        model: env.ANTHROPIC_MODEL,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return fallbackAnswer;
     }
   }
 };

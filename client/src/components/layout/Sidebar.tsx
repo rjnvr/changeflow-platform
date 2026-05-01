@@ -8,6 +8,7 @@ import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import SyncAltRoundedIcon from "@mui/icons-material/SyncAltRounded";
+import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
@@ -46,6 +47,12 @@ const navigationItems = [
     to: "/app/schedule",
     icon: <EventAvailableRoundedIcon />,
     matches: (pathname: string) => pathname.startsWith("/app/schedule")
+  },
+  {
+    label: "Tasks",
+    to: "/app/tasks",
+    icon: <AssignmentTurnedInRoundedIcon />,
+    matches: (pathname: string) => pathname.startsWith("/app/tasks")
   },
   {
     label: "Integrations",

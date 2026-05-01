@@ -84,6 +84,50 @@ export const projectController = {
       data: await projectService.listDocuments(request.user!, getRouteParam(request.params.projectId))
     });
   },
+  async getAgentWorkspace(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.getAgentWorkspace(request.user!, getRouteParam(request.params.projectId))
+    });
+  },
+  async listTasks(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.listProjectTasks(request.user!)
+    });
+  },
+  async listRiskFlags(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.listProjectRiskFlags(request.user!)
+    });
+  },
+  async updateTaskStatus(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.updateProjectTaskStatus(request.user!, getRouteParam(request.params.taskId), request.body)
+    });
+  },
+  async updateRiskFlagStatus(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.updateProjectRiskFlagStatus(
+        request.user!,
+        getRouteParam(request.params.riskFlagId),
+        request.body
+      )
+    });
+  },
+  async askQuestion(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.askProjectQuestion(
+        request.user!,
+        getRouteParam(request.params.projectId),
+        request.body
+      )
+    });
+  },
   async addDocument(request: Request, response: Response) {
     response.status(201).json({
       success: true,

@@ -6,13 +6,16 @@ import { validate } from "../middleware/validate.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   bulkUpdateProjectStatusSchema,
+  askProjectQuestionSchema,
   createProjectAccessRequestSchema,
   createProjectDocumentSchema,
   createProjectDocumentUploadIntentSchema,
   createProjectSchema,
   createProjectTeamMemberSchema,
   updateProjectDocumentSchema,
+  updateProjectRiskFlagStatusSchema,
   updateProjectSchema,
+  updateProjectTaskStatusSchema,
   updateProjectTeamMemberSchema
 } from "../validators/project.schemas.js";
 
@@ -23,10 +26,22 @@ projectRouter.get("/", asyncHandler(projectController.list));
 projectRouter.get("/locked", asyncHandler(projectController.listLocked));
 projectRouter.get("/access-requests", asyncHandler(projectController.listAccessRequests));
 projectRouter.get("/team-members", asyncHandler(projectController.listTeamDirectory));
+projectRouter.get("/tasks", asyncHandler(projectController.listTasks));
+projectRouter.get("/risk-flags", asyncHandler(projectController.listRiskFlags));
 projectRouter.patch(
   "/status",
   validate(bulkUpdateProjectStatusSchema),
   asyncHandler(projectController.bulkUpdateStatus)
+);
+projectRouter.patch(
+  "/tasks/:taskId/status",
+  validate(updateProjectTaskStatusSchema),
+  asyncHandler(projectController.updateTaskStatus)
+);
+projectRouter.patch(
+  "/risk-flags/:riskFlagId/status",
+  validate(updateProjectRiskFlagStatusSchema),
+  asyncHandler(projectController.updateRiskFlagStatus)
 );
 projectRouter.post("/:projectId/brief", asyncHandler(projectController.generateBrief));
 projectRouter.post("/:projectId/archive", asyncHandler(projectController.archive));
@@ -47,6 +62,8 @@ projectRouter.post(
 projectRouter.get("/:projectId", asyncHandler(projectController.get));
 projectRouter.get("/:projectId/team", asyncHandler(projectController.listTeamMembers));
 projectRouter.get("/:projectId/documents", asyncHandler(projectController.listDocuments));
+projectRouter.get("/:projectId/agent-workspace", asyncHandler(projectController.getAgentWorkspace));
+projectRouter.post("/:projectId/questions", validate(askProjectQuestionSchema), asyncHandler(projectController.askQuestion));
 projectRouter.get("/:projectId/documents/:documentId/download-url", asyncHandler(projectController.getDocumentDownloadUrl));
 projectRouter.post(
   "/:projectId/team",

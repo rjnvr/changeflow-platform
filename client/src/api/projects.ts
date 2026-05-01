@@ -1,9 +1,13 @@
 import type {
   ProjectAccessRequest,
   ProjectAnalyticsBrief,
+  ProjectAgentWorkspace,
   Project,
   ProjectDocument,
   ProjectDocumentUploadIntent,
+  ProjectRiskFlag,
+  ProjectQuestionAnswer,
+  ProjectTask,
   ProjectTeamMember,
   ProjectTeamMemberDirectoryEntry
 } from "../types/project";
@@ -111,6 +115,39 @@ export function updateProjectTeamMember(
 
 export function getProjectDocuments(projectId: string) {
   return apiRequest<ProjectDocument[]>(`/projects/${projectId}/documents`);
+}
+
+export function getProjectAgentWorkspace(projectId: string) {
+  return apiRequest<ProjectAgentWorkspace>(`/projects/${projectId}/agent-workspace`);
+}
+
+export function getProjectTasks() {
+  return apiRequest<ProjectTask[]>("/projects/tasks");
+}
+
+export function getProjectRiskFlags() {
+  return apiRequest<ProjectRiskFlag[]>("/projects/risk-flags");
+}
+
+export function updateProjectTaskStatus(taskId: string, input: { status: "suggested" | "open" | "in_progress" | "done" }) {
+  return apiRequest<ProjectTask>(`/projects/tasks/${taskId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export function updateProjectRiskFlagStatus(riskFlagId: string, input: { status: "open" | "reviewed" | "mitigated" }) {
+  return apiRequest<ProjectRiskFlag>(`/projects/risk-flags/${riskFlagId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export function askProjectQuestion(projectId: string, input: { question: string }) {
+  return apiRequest<ProjectQuestionAnswer>(`/projects/${projectId}/questions`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function createProjectDocument(
