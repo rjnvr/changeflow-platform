@@ -1,4 +1,5 @@
 import { agentMemoryEntryRepository } from "../repositories/agentMemoryEntry.repository.js";
+import { agentPendingActionRepository } from "../repositories/agentPendingAction.repository.js";
 import { agentToolExecutionRepository } from "../repositories/agentToolExecution.repository.js";
 import { agentRunRepository } from "../repositories/agentRun.repository.js";
 import type { AgentMemoryEntryRecord, ChangeOrderRecord, ProjectCommentRecord, ProjectDocumentRecord, ProjectRecord, ProjectRiskFlagRecord, ProjectTaskRecord, ProjectTeamMemberRecord } from "../types/domain.js";
@@ -94,27 +95,34 @@ export const agentOrchestratorService = {
     }
 
     const assignedTo = normalizeAssignee(actionPlan.suggestedAssignee ?? input.document.assignedTo, input.teamMembers);
-    const updatedDocument = await agentToolsService.assignDocument(input.document, assignedTo);
+    let updatedDocument: ProjectDocumentRecord | null = null;
+    const queuedPendingActions: Array<{ actionType: string; title: string }> = [];
 
-    if (input.agentRunId) {
-      await agentToolExecutionRepository.create({
+    if (
+      input.agentRunId &&
+      assignedTo &&
+      assignedTo !== input.document.assignedTo
+    ) {
+      await agentPendingActionRepository.create({
         runId: input.agentRunId,
-        toolName: "assign_document",
-        status: "completed",
-        title: assignedTo ? `Assigned document to ${assignedTo}` : "Kept document assignment unchanged",
-        resultSummary: assignedTo
-          ? `${input.document.title} is now assigned to ${assignedTo}.`
-          : `${input.document.title} remained unassigned because no confident assignee was selected.`,
+        projectId: input.project.id,
+        documentId: input.document.id,
+        actionType: "assign_document",
+        status: "pending",
+        title: `Review assignment to ${assignedTo}`,
+        summary: `The agent recommends assigning ${input.document.title} to ${assignedTo}.`,
         inputJson: serializeJson({
           documentId: input.document.id,
-          previousAssignedTo: input.document.assignedTo,
-          requestedAssignedTo: actionPlan.suggestedAssignee
-        }),
-        outputJson: serializeJson({
-          documentId: updatedDocument?.id ?? input.document.id,
-          assignedTo: updatedDocument?.assignedTo ?? assignedTo
+          assignedTo,
+          previousAssignedTo: input.document.assignedTo
         })
       });
+      queuedPendingActions.push({
+        actionType: "assign_document",
+        title: `Queued assignment review for ${assignedTo}`
+      });
+    } else {
+      updatedDocument = input.document;
     }
 
     const createdTasks: ProjectTaskRecord[] = [];
@@ -193,57 +201,53 @@ export const agentOrchestratorService = {
       }
     }
 
-    const createdComment = await agentToolsService.addProjectComment({
-      projectId: input.project.id,
-      sourceDocumentId: input.document.id,
-      authorName: "ChangeFlow Agent",
-      body: actionPlan.projectComment,
-      createdByAgent: true
-    });
+    let createdComment: ProjectCommentRecord | null = null;
 
     if (input.agentRunId) {
-      await agentToolExecutionRepository.create({
+      await agentPendingActionRepository.create({
         runId: input.agentRunId,
-        toolName: "add_project_comment",
-        status: createdComment ? "completed" : "skipped",
-        title: "Post project note",
-        resultSummary: createdComment
-          ? "A summarized agent note was posted to the project."
-          : "The agent prepared a project note, but it was not stored.",
+        projectId: input.project.id,
+        documentId: input.document.id,
+        actionType: "add_project_comment",
+        status: "pending",
+        title: "Review agent project note",
+        summary: "The agent prepared a project-facing summary note for the team.",
         inputJson: serializeJson({
           projectId: input.project.id,
           sourceDocumentId: input.document.id,
-          body: actionPlan.projectComment
-        }),
-        outputJson: serializeJson(createdComment)
+          authorName: "ChangeFlow Agent",
+          body: actionPlan.projectComment,
+          createdByAgent: true
+        })
+      });
+      queuedPendingActions.push({
+        actionType: "add_project_comment",
+        title: "Queued project note review"
       });
     }
 
     let changeOrderFollowUpComment: ProjectCommentRecord | null = null;
 
     if (actionPlan.changeOrderFollowUp) {
-      changeOrderFollowUpComment = await agentToolsService.suggestChangeOrderFollowUp({
-        projectId: input.project.id,
-        sourceDocumentId: input.document.id,
-        authorName: "ChangeFlow Agent",
-        message: actionPlan.changeOrderFollowUp
-      });
-
       if (input.agentRunId) {
-        await agentToolExecutionRepository.create({
+        await agentPendingActionRepository.create({
           runId: input.agentRunId,
-          toolName: "suggest_change_order_follow_up",
-          status: changeOrderFollowUpComment ? "completed" : "skipped",
-          title: "Suggest change-order follow-up",
-          resultSummary: changeOrderFollowUpComment
-            ? "A change-order follow-up recommendation was posted for the team."
-            : "The agent suggested change-order follow-up, but no project note was stored.",
+          projectId: input.project.id,
+          documentId: input.document.id,
+          actionType: "suggest_change_order_follow_up",
+          status: "pending",
+          title: "Review change-order follow-up note",
+          summary: "The agent recommends posting a change-order follow-up note for this document.",
           inputJson: serializeJson({
             projectId: input.project.id,
             sourceDocumentId: input.document.id,
+            authorName: "ChangeFlow Agent",
             message: actionPlan.changeOrderFollowUp
-          }),
-          outputJson: serializeJson(changeOrderFollowUpComment)
+          })
+        });
+        queuedPendingActions.push({
+          actionType: "suggest_change_order_follow_up",
+          title: "Queued change-order follow-up review"
         });
       }
     }
@@ -254,7 +258,7 @@ export const agentOrchestratorService = {
         stepType: "tool_execution",
         status: "completed",
         title: "Executed agent tools",
-        details: `Created ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"}, ${createdRiskFlags.length} risk flag${createdRiskFlags.length === 1 ? "" : "s"}, and ${changeOrderFollowUpComment ? "2" : "1"} project comment${changeOrderFollowUpComment ? "s" : ""}.`
+        details: `Executed ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} and ${createdRiskFlags.length} risk flag${createdRiskFlags.length === 1 ? "" : "s"}. Queued ${queuedPendingActions.length} review action${queuedPendingActions.length === 1 ? "" : "s"} for owner/admin approval.`
       });
     }
 

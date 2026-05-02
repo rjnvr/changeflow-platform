@@ -72,6 +72,7 @@ model Project {
   documentProcessingRuns DocumentProcessingRun[]
   documentChunks DocumentChunk[]
   agentRuns     AgentRun[]
+  pendingAgentActions AgentPendingAction[]
   agentMemoryEntries AgentMemoryEntry[]
   accessGrants  ProjectAccess[]
   accessRequests ProjectAccessRequest[]
@@ -142,6 +143,7 @@ model ProjectDocument {
   generatedComments ProjectComment[]
   chunks DocumentChunk[]
   agentRuns AgentRun[]
+  pendingAgentActions AgentPendingAction[]
   agentMemoryEntries AgentMemoryEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -236,6 +238,7 @@ model AgentRun {
   document   ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   steps      AgentStep[]
   toolExecutions AgentToolExecution[]
+  pendingActions AgentPendingAction[]
   memoryEntries AgentMemoryEntry[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -272,6 +275,31 @@ model AgentToolExecution {
   updatedAt      DateTime @updatedAt
 
   @@index([runId])
+}
+
+model AgentPendingAction {
+  id            String   @id @default(cuid())
+  runId          String
+  projectId      String
+  documentId     String?
+  actionType     String
+  status         String   @default("pending")
+  title          String
+  summary        String
+  inputJson      String?
+  approvedById   String?
+  approvedAt     DateTime?
+  dismissedById  String?
+  dismissedAt    DateTime?
+  run            AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document       ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([runId])
+  @@index([projectId])
+  @@index([documentId])
 }
 
 model AgentMemoryEntry {

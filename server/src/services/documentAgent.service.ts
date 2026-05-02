@@ -5,6 +5,7 @@ import { projectDocumentRepository } from "../repositories/projectDocument.repos
 import { projectRiskFlagRepository } from "../repositories/projectRiskFlag.repository.js";
 import { projectTaskRepository } from "../repositories/projectTask.repository.js";
 import { projectCommentRepository } from "../repositories/projectComment.repository.js";
+import { agentPendingActionRepository } from "../repositories/agentPendingAction.repository.js";
 import { documentChunkRepository } from "../repositories/documentChunk.repository.js";
 import { agentMemoryEntryRepository } from "../repositories/agentMemoryEntry.repository.js";
 import { agentRunRepository } from "../repositories/agentRun.repository.js";
@@ -28,6 +29,10 @@ function isAgentHistoryStorageError(error: unknown) {
     error.message.includes("AgentStep") ||
     error.message.includes("AgentMemoryEntry")
   );
+}
+
+function assignmentChanged(nextAssignedTo: string | undefined, previousAssignedTo: string | undefined) {
+  return Boolean(nextAssignedTo && nextAssignedTo !== previousAssignedTo);
 }
 
 export const documentAgentService = {
@@ -94,6 +99,7 @@ export const documentAgentService = {
         projectTaskRepository.deleteAgentTasksForDocument(project.id, document.id),
         projectRiskFlagRepository.deleteAgentRiskFlagsForDocument(project.id, document.id),
         projectCommentRepository.deleteAgentCommentsForDocument(project.id, document.id),
+        agentPendingActionRepository.deleteForDocument(project.id, document.id),
         agentMemoryEntryRepository.deleteForDocument(project.id, document.id).catch((error: unknown) => {
           if (!isAgentHistoryStorageError(error)) {
             throw error;
@@ -198,7 +204,7 @@ export const documentAgentService = {
         agentStatus: "completed",
         processingError: "",
         lastProcessedAt: new Date().toISOString(),
-        assignedTo: orchestration.assignedTo,
+        assignedTo: orchestration.updatedDocument?.assignedTo ?? document.assignedTo,
         url: document.url
       });
 
@@ -229,6 +235,11 @@ export const documentAgentService = {
         projectId: project.id,
         taskCount: orchestration.createdTasks.length,
         riskCount: orchestration.createdRiskFlags.length,
+        pendingReviewCount: [
+          assignmentChanged(orchestration.assignedTo, document.assignedTo),
+          true,
+          Boolean(orchestration.actionPlan.changeOrderFollowUp)
+        ].filter(Boolean).length,
         extractionMethod,
         source: orchestration.actionPlan.source,
         documentType: orchestration.classification.documentType

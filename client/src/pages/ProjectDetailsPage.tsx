@@ -40,6 +40,7 @@ import { useProjectDocuments } from "../hooks/useProjectDocuments";
 import { useProjectTeamMembers } from "../hooks/useProjectTeamMembers";
 import type {
   AgentMemoryEntry,
+  AgentPendingAction,
   AgentRun,
   AgentToolExecution,
   DocumentProcessingRun,
@@ -327,6 +328,8 @@ export function ProjectDetailsPage() {
   const latestProcessingRuns = agentWorkspace?.processingRuns.slice(0, 3) ?? [];
   const latestAgentRuns = agentWorkspace?.agentRuns.slice(0, 2) ?? [];
   const latestToolExecutions = agentWorkspace?.toolExecutions.slice(0, 3) ?? [];
+  const pendingAgentActions = agentWorkspace?.pendingActions ?? [];
+  const latestPendingAgentActions = pendingAgentActions.filter((action) => action.status === "pending").slice(0, 3);
   const latestMemoryEntries = agentWorkspace?.memoryEntries.slice(0, 3) ?? [];
   const impactValue = changeOrders.reduce((total, item) => total + item.amount, 0);
   const utilization = Math.min(64 + changeOrders.length * 4, 92);
@@ -742,7 +745,7 @@ export function ProjectDetailsPage() {
                 <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
               </Stack>
 
-              {latestAgentRuns.length > 0 || latestMemoryEntries.length > 0 || latestToolExecutions.length > 0 ? (
+              {latestAgentRuns.length > 0 || latestMemoryEntries.length > 0 || latestToolExecutions.length > 0 || latestPendingAgentActions.length > 0 ? (
                 <Stack spacing={1.5} sx={{ mb: 2.6 }}>
                   {latestAgentRuns.map((run: AgentRun) => (
                     <Paper
@@ -771,7 +774,33 @@ export function ProjectDetailsPage() {
                       {entry.title}
                     </Typography>
                   ))}
-                  {latestToolExecutions.length > 0 ? (
+                  {latestPendingAgentActions.length > 0 ? (
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 1.8,
+                        borderRadius: 3,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.9)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
+                        Pending Review Queue
+                      </Typography>
+                      <Stack spacing={0.8} sx={{ mt: 1 }}>
+                        {latestPendingAgentActions.map((action: AgentPendingAction) => (
+                          <Box key={action.id}>
+                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: "#00342B" }}>
+                              {action.title}
+                            </Typography>
+                            <Typography sx={{ mt: 0.2, fontSize: "0.78rem", color: "#5A6A84" }}>
+                              {action.actionType.replace(/_/g, " ")} • {action.status}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ) : latestToolExecutions.length > 0 ? (
                     <Paper
                       elevation={0}
                       sx={{
@@ -1764,12 +1793,18 @@ export function ProjectDetailsPage() {
       <AgentWorkspaceModal
         open={agentWorkspaceOpen}
         onClose={() => setAgentWorkspaceOpen(false)}
+        onRefresh={async () => {
+          await Promise.all([refreshAgentWorkspace(), refreshDocuments()]);
+        }}
+        projectId={projectId}
+        canReviewActions={canEditProject}
         tasks={projectTasks}
         riskFlags={projectRiskFlags}
         comments={projectComments}
         processingRuns={agentWorkspace?.processingRuns ?? []}
         agentRuns={agentWorkspace?.agentRuns ?? []}
         toolExecutions={agentWorkspace?.toolExecutions ?? []}
+        pendingActions={agentWorkspace?.pendingActions ?? []}
         memoryEntries={agentWorkspace?.memoryEntries ?? []}
       />
     </Stack>

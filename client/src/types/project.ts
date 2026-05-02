@@ -177,6 +177,24 @@ export interface AgentToolExecution {
   updatedAt: string;
 }
 
+export interface AgentPendingAction {
+  id: string;
+  runId: string;
+  projectId: string;
+  documentId?: string;
+  actionType: "assign_document" | "add_project_comment" | "suggest_change_order_follow_up";
+  status: "pending" | "approved" | "dismissed";
+  title: string;
+  summary: string;
+  inputJson?: string;
+  approvedById?: string;
+  approvedAt?: string;
+  dismissedById?: string;
+  dismissedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AgentRun {
   id: string;
   projectId: string;
@@ -209,6 +227,7 @@ export interface ProjectAgentWorkspace {
   processingRuns: DocumentProcessingRun[];
   agentRuns: AgentRun[];
   toolExecutions: AgentToolExecution[];
+  pendingActions: AgentPendingAction[];
   memoryEntries: AgentMemoryEntry[];
 }
 

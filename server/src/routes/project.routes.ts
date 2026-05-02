@@ -66,6 +66,14 @@ projectRouter.get("/:projectId/team", asyncHandler(projectController.listTeamMem
 projectRouter.get("/:projectId/documents", asyncHandler(projectController.listDocuments));
 projectRouter.get("/:projectId/comments", asyncHandler(projectController.listComments));
 projectRouter.get("/:projectId/agent-workspace", asyncHandler(projectController.getAgentWorkspace));
+projectRouter.post(
+  "/:projectId/pending-actions/:pendingActionId/approve",
+  asyncHandler(projectController.approvePendingAction)
+);
+projectRouter.post(
+  "/:projectId/pending-actions/:pendingActionId/dismiss",
+  asyncHandler(projectController.dismissPendingAction)
+);
 projectRouter.post("/:projectId/questions", validate(askProjectQuestionSchema), asyncHandler(projectController.askQuestion));
 projectRouter.get("/:projectId/documents/:documentId/download-url", asyncHandler(projectController.getDocumentDownloadUrl));
 projectRouter.post("/:projectId/documents/:documentId/reprocess", asyncHandler(projectController.reprocessDocument));

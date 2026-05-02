@@ -12,10 +12,16 @@ import ButtonBase from "@mui/material/ButtonBase";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { updateProjectRiskFlagStatus, updateProjectTaskStatus } from "../../api/projects";
+import {
+  approvePendingAgentAction,
+  dismissPendingAgentAction,
+  updateProjectRiskFlagStatus,
+  updateProjectTaskStatus
+} from "../../api/projects";
 import { useFeedbackContext } from "../../context/FeedbackContext";
 import type {
   AgentMemoryEntry,
+  AgentPendingAction,
   AgentRun,
   AgentToolExecution,
   DocumentProcessingRun,
@@ -28,30 +34,39 @@ import { formatDateTime } from "../../utils/formatDate";
 interface AgentWorkspaceModalProps {
   open: boolean;
   onClose: () => void;
+  onRefresh?: () => Promise<void> | void;
+  projectId: string;
+  canReviewActions: boolean;
   tasks: ProjectTask[];
   riskFlags: ProjectRiskFlag[];
   comments: ProjectComment[];
   processingRuns: DocumentProcessingRun[];
   agentRuns: AgentRun[];
   toolExecutions: AgentToolExecution[];
+  pendingActions: AgentPendingAction[];
   memoryEntries: AgentMemoryEntry[];
 }
 
 export function AgentWorkspaceModal({
   open,
   onClose,
+  onRefresh,
+  projectId,
+  canReviewActions,
   tasks,
   riskFlags,
   comments,
   processingRuns,
   agentRuns,
   toolExecutions,
+  pendingActions,
   memoryEntries
 }: AgentWorkspaceModalProps) {
   const navigate = useNavigate();
   const { showToast } = useFeedbackContext();
   const [localTasks, setLocalTasks] = useState(tasks);
   const [localRiskFlags, setLocalRiskFlags] = useState(riskFlags);
+  const [localPendingActions, setLocalPendingActions] = useState(pendingActions);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,6 +76,10 @@ export function AgentWorkspaceModal({
   useEffect(() => {
     setLocalRiskFlags(riskFlags);
   }, [riskFlags]);
+
+  useEffect(() => {
+    setLocalPendingActions(pendingActions);
+  }, [pendingActions]);
 
   async function handleTaskStatusUpdate(taskId: string, status: "suggested" | "open" | "in_progress" | "done") {
     setUpdatingItemId(taskId);
@@ -89,6 +108,33 @@ export function AgentWorkspaceModal({
         message: `Risk flag marked ${status}.`,
         severity: "success"
       });
+    } finally {
+      setUpdatingItemId(null);
+    }
+  }
+
+  async function handlePendingActionResolution(
+    pendingActionId: string,
+    resolution: "approve" | "dismiss"
+  ) {
+    setUpdatingItemId(pendingActionId);
+
+    try {
+      if (resolution === "approve") {
+        await approvePendingAgentAction(projectId, pendingActionId);
+      } else {
+        await dismissPendingAgentAction(projectId, pendingActionId);
+      }
+
+      setLocalPendingActions((current) => current.filter((action) => action.id !== pendingActionId));
+      showToast({
+        message:
+          resolution === "approve"
+            ? "Agent action approved and applied."
+            : "Agent action dismissed.",
+        severity: "success"
+      });
+      await onRefresh?.();
     } finally {
       setUpdatingItemId(null);
     }
@@ -143,7 +189,7 @@ export function AgentWorkspaceModal({
                 Agent Workspace
               </Typography>
               <Typography sx={{ mt: 1, fontSize: "1rem", color: "#42536D" }}>
-                Review generated tasks, risk flags, tool executions, and recent document-processing runs.
+                Review queued agent actions, generated tasks, risk flags, tool executions, and recent document-processing runs.
               </Typography>
             </Box>
             <IconButton onClick={onClose} sx={{ color: "#707975" }}>
@@ -162,6 +208,66 @@ export function AgentWorkspaceModal({
               gap: 3
             }}
           >
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Agent Review Queue</Typography>
+              </Stack>
+              {localPendingActions.filter((action) => action.status === "pending").length > 0 ? (
+                localPendingActions
+                  .filter((action) => action.status === "pending")
+                  .slice(0, 8)
+                  .map((action) => (
+                    <Paper key={action.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#F9FCFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                      <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {action.actionType.replace(/_/g, " ")} • {action.status}
+                      </Typography>
+                      <Typography sx={{ mt: 0.35, fontSize: "0.92rem", fontWeight: 800, color: "#00342B" }}>
+                        {action.title}
+                      </Typography>
+                      <Typography sx={{ mt: 0.55, fontSize: "0.84rem", lineHeight: 1.6, color: "#42536D" }}>
+                        {action.summary}
+                      </Typography>
+                      {action.inputJson ? (
+                        <Box sx={{ mt: 0.9 }}>
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Proposed Inputs
+                          </Typography>
+                          <Typography sx={{ mt: 0.3, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84", wordBreak: "break-word" }}>
+                            {action.inputJson}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                      <Typography sx={{ mt: 0.8, fontSize: "0.76rem", color: "#7A869F" }}>{formatDateTime(action.updatedAt)}</Typography>
+                      {canReviewActions ? (
+                        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1.2 }}>
+                          <ButtonBase
+                            disabled={updatingItemId === action.id}
+                            onClick={() => void handlePendingActionResolution(action.id, "approve")}
+                            sx={{ px: 1.4, py: 0.85, borderRadius: 2.2, backgroundColor: "#9DEFDE", color: "#0F6F62" }}
+                          >
+                            <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>Approve</Typography>
+                          </ButtonBase>
+                          <ButtonBase
+                            disabled={updatingItemId === action.id}
+                            onClick={() => void handlePendingActionResolution(action.id, "dismiss")}
+                            sx={{ px: 1.4, py: 0.85, borderRadius: 2.2, backgroundColor: "#FFDBD1", color: "#872000" }}
+                          >
+                            <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>Dismiss</Typography>
+                          </ButtonBase>
+                        </Stack>
+                      ) : (
+                        <Typography sx={{ mt: 1, fontSize: "0.78rem", color: "#7A869F" }}>
+                          Owner or admin approval is required to resolve this action.
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))
+              ) : (
+                <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No pending agent review items right now.</Typography>
+              )}
+            </Stack>
+
             <Stack spacing={2}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />

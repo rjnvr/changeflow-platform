@@ -1,7 +1,13 @@
 import { projectRepository } from "../repositories/project.repository.js";
 import { projectDocumentRepository } from "../repositories/projectDocument.repository.js";
 import { projectTeamMemberRepository } from "../repositories/projectTeamMember.repository.js";
-import type { AgentMemoryEntryRecord, AgentRunRecord, AgentToolExecutionRecord, AuthenticatedUser } from "../types/domain.js";
+import type {
+  AgentMemoryEntryRecord,
+  AgentPendingActionRecord,
+  AgentRunRecord,
+  AgentToolExecutionRecord,
+  AuthenticatedUser
+} from "../types/domain.js";
 import { ApiError } from "../utils/apiError.js";
 import { changeOrderRepository } from "../repositories/changeOrder.repository.js";
 import { projectAccessRepository } from "../repositories/projectAccess.repository.js";
@@ -12,12 +18,14 @@ import { projectTaskRepository } from "../repositories/projectTask.repository.js
 import { projectCommentRepository } from "../repositories/projectComment.repository.js";
 import { documentProcessingRunRepository } from "../repositories/documentProcessingRun.repository.js";
 import { agentMemoryEntryRepository } from "../repositories/agentMemoryEntry.repository.js";
+import { agentPendingActionRepository } from "../repositories/agentPendingAction.repository.js";
 import { agentRunRepository } from "../repositories/agentRun.repository.js";
 import { agentToolExecutionRepository } from "../repositories/agentToolExecution.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { auditLogService } from "./auditLog.service.js";
 import { projectAccessService } from "./projectAccess.service.js";
 import { aiSummaryService } from "./aiSummary.service.js";
+import { agentToolsService } from "./agentTools.service.js";
 import { documentAgentService } from "./documentAgent.service.js";
 import { ragService } from "./rag.service.js";
 import { storageService } from "./storage.service.js";
@@ -33,7 +41,8 @@ function isAgentHistoryStorageError(error: unknown) {
     error.message.includes("AgentRun") ||
     error.message.includes("AgentStep") ||
     error.message.includes("AgentMemoryEntry") ||
-    error.message.includes("AgentToolExecution")
+    error.message.includes("AgentToolExecution") ||
+    error.message.includes("AgentPendingAction")
   );
 }
 
@@ -293,12 +302,14 @@ export const projectService = {
     let agentRuns: AgentRunRecord[] = [];
     let memoryEntries: AgentMemoryEntryRecord[] = [];
     let toolExecutions: AgentToolExecutionRecord[] = [];
+    let pendingActions: AgentPendingActionRecord[] = [];
 
     try {
-      [agentRuns, memoryEntries, toolExecutions] = await Promise.all([
+      [agentRuns, memoryEntries, toolExecutions, pendingActions] = await Promise.all([
         agentRunRepository.listByProject(projectId),
         agentMemoryEntryRepository.listByProject(projectId),
-        agentToolExecutionRepository.listByProject(projectId)
+        agentToolExecutionRepository.listByProject(projectId),
+        agentPendingActionRepository.listByProject(projectId)
       ]);
     } catch (error) {
       if (!isAgentHistoryStorageError(error)) {
@@ -313,8 +324,161 @@ export const projectService = {
       processingRuns,
       agentRuns,
       toolExecutions,
+      pendingActions,
       memoryEntries
     };
+  },
+  async approvePendingAgentAction(requestUser: AuthenticatedUser, projectId: string, pendingActionId: string) {
+    const project = await this.getProject(requestUser, projectId);
+
+    if (!canEditProject(requestUser, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner or admin can approve agent review actions.");
+    }
+
+    const pendingAction = await agentPendingActionRepository.findById(pendingActionId);
+
+    if (!pendingAction || pendingAction.projectId !== projectId) {
+      throw new ApiError(404, "Pending agent action not found.");
+    }
+
+    if (pendingAction.status !== "pending") {
+      throw new ApiError(400, "This agent review action has already been resolved.");
+    }
+
+    const parsedInput = pendingAction.inputJson ? JSON.parse(pendingAction.inputJson) as Record<string, unknown> : {};
+
+    let resultSummary = "Agent action approved.";
+    let outputJson: string | undefined;
+
+    if (pendingAction.actionType === "assign_document") {
+      const documentId = typeof parsedInput.documentId === "string" ? parsedInput.documentId : "";
+      const assignedTo = typeof parsedInput.assignedTo === "string" ? parsedInput.assignedTo : undefined;
+      const document = await projectDocumentRepository.findById(projectId, documentId);
+
+      if (!document) {
+        throw new ApiError(404, "Document not found.");
+      }
+
+      const updatedDocument = await projectDocumentRepository.update(projectId, documentId, {
+        title: document.title,
+        kind: document.kind,
+        summary: document.summary,
+        aiSummary: document.aiSummary,
+        agentStatus: document.agentStatus,
+        processingError: document.processingError,
+        lastProcessedAt: document.lastProcessedAt,
+        assignedTo,
+        url: document.url
+      });
+
+      resultSummary = assignedTo
+        ? `${document.title} was assigned to ${assignedTo}.`
+        : `${document.title} remained unassigned.`;
+      outputJson = JSON.stringify(updatedDocument ?? document);
+      await agentMemoryEntryRepository.createMany([
+        {
+          projectId,
+          documentId,
+          runId: pendingAction.runId,
+          kind: "document_assignment",
+          title: document.title,
+          content: assignedTo ? `Approved assignment to ${assignedTo}.` : "Approved leaving the document unassigned."
+        }
+      ]);
+    }
+
+    if (pendingAction.actionType === "add_project_comment") {
+      const createdComment = await agentToolsService.addProjectComment({
+        projectId,
+        sourceDocumentId: typeof parsedInput.sourceDocumentId === "string" ? parsedInput.sourceDocumentId : undefined,
+        authorName: typeof parsedInput.authorName === "string" ? parsedInput.authorName : "ChangeFlow Agent",
+        body: typeof parsedInput.body === "string" ? parsedInput.body : pendingAction.summary,
+        createdByAgent: true
+      });
+
+      resultSummary = "Approved and posted the agent project note.";
+      outputJson = createdComment ? JSON.stringify(createdComment) : undefined;
+      if (createdComment) {
+        await agentMemoryEntryRepository.createMany([
+          {
+            projectId,
+            documentId: createdComment.sourceDocumentId,
+            runId: pendingAction.runId,
+            kind: "project_comment",
+            title: createdComment.authorName,
+            content: createdComment.body
+          }
+        ]);
+      }
+    }
+
+    if (pendingAction.actionType === "suggest_change_order_follow_up") {
+      const createdComment = await agentToolsService.suggestChangeOrderFollowUp({
+        projectId,
+        sourceDocumentId: typeof parsedInput.sourceDocumentId === "string" ? parsedInput.sourceDocumentId : undefined,
+        authorName: typeof parsedInput.authorName === "string" ? parsedInput.authorName : "ChangeFlow Agent",
+        message: typeof parsedInput.message === "string" ? parsedInput.message : pendingAction.summary
+      });
+
+      resultSummary = "Approved and posted the change-order follow-up note.";
+      outputJson = createdComment ? JSON.stringify(createdComment) : undefined;
+      if (createdComment) {
+        await agentMemoryEntryRepository.createMany([
+          {
+            projectId,
+            documentId: createdComment.sourceDocumentId,
+            runId: pendingAction.runId,
+            kind: "change_order_follow_up",
+            title: createdComment.authorName,
+            content: createdComment.body
+          }
+        ]);
+      }
+    }
+
+    const approvedAction = await agentPendingActionRepository.markApproved(pendingActionId, requestUser.id);
+
+    await agentToolExecutionRepository.create({
+      runId: pendingAction.runId,
+      toolName: pendingAction.actionType,
+      status: "approved",
+      title: pendingAction.title,
+      resultSummary,
+      inputJson: pendingAction.inputJson,
+      outputJson
+    });
+
+    return approvedAction;
+  },
+  async dismissPendingAgentAction(requestUser: AuthenticatedUser, projectId: string, pendingActionId: string) {
+    const project = await this.getProject(requestUser, projectId);
+
+    if (!canEditProject(requestUser, project.ownerId)) {
+      throw new ApiError(403, "Only the project owner or admin can dismiss agent review actions.");
+    }
+
+    const pendingAction = await agentPendingActionRepository.findById(pendingActionId);
+
+    if (!pendingAction || pendingAction.projectId !== projectId) {
+      throw new ApiError(404, "Pending agent action not found.");
+    }
+
+    if (pendingAction.status !== "pending") {
+      throw new ApiError(400, "This agent review action has already been resolved.");
+    }
+
+    const dismissedAction = await agentPendingActionRepository.markDismissed(pendingActionId, requestUser.id);
+
+    await agentToolExecutionRepository.create({
+      runId: pendingAction.runId,
+      toolName: pendingAction.actionType,
+      status: "dismissed",
+      title: pendingAction.title,
+      resultSummary: "The proposed agent action was dismissed by a reviewer.",
+      inputJson: pendingAction.inputJson
+    });
+
+    return dismissedAction;
   },
   async listProjectTasks(requestUser: AuthenticatedUser) {
     const accessibleProjectIds = await projectAccessService.listAccessibleProjectIds(requestUser, {

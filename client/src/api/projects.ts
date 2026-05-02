@@ -2,6 +2,7 @@ import type {
   ProjectAccessRequest,
   ProjectAnalyticsBrief,
   ProjectAgentWorkspace,
+  AgentPendingAction,
   Project,
   ProjectDocument,
   ProjectDocumentUploadIntent,
@@ -124,6 +125,18 @@ export function getProjectComments(projectId: string) {
 
 export function getProjectAgentWorkspace(projectId: string) {
   return apiRequest<ProjectAgentWorkspace>(`/projects/${projectId}/agent-workspace`);
+}
+
+export function approvePendingAgentAction(projectId: string, pendingActionId: string) {
+  return apiRequest<AgentPendingAction>(`/projects/${projectId}/pending-actions/${pendingActionId}/approve`, {
+    method: "POST"
+  });
+}
+
+export function dismissPendingAgentAction(projectId: string, pendingActionId: string) {
+  return apiRequest<AgentPendingAction>(`/projects/${projectId}/pending-actions/${pendingActionId}/dismiss`, {
+    method: "POST"
+  });
 }
 
 export function getProjectTasks() {

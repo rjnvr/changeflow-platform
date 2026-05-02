@@ -109,6 +109,25 @@ CREATE TABLE IF NOT EXISTS "AgentToolExecution" (
   CONSTRAINT "AgentToolExecution_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE IF NOT EXISTS "AgentPendingAction" (
+  "id" TEXT NOT NULL,
+  "runId" TEXT NOT NULL,
+  "projectId" TEXT NOT NULL,
+  "documentId" TEXT,
+  "actionType" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'pending',
+  "title" TEXT NOT NULL,
+  "summary" TEXT NOT NULL,
+  "inputJson" TEXT,
+  "approvedById" TEXT,
+  "approvedAt" TIMESTAMP(3),
+  "dismissedById" TEXT,
+  "dismissedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AgentPendingAction_pkey" PRIMARY KEY ("id")
+);
+
 CREATE TABLE IF NOT EXISTS "AgentMemoryEntry" (
   "id" TEXT NOT NULL,
   "projectId" TEXT NOT NULL,
@@ -138,6 +157,9 @@ CREATE INDEX IF NOT EXISTS "AgentRun_projectId_idx" ON "AgentRun"("projectId");
 CREATE INDEX IF NOT EXISTS "AgentRun_documentId_idx" ON "AgentRun"("documentId");
 CREATE INDEX IF NOT EXISTS "AgentStep_runId_idx" ON "AgentStep"("runId");
 CREATE INDEX IF NOT EXISTS "AgentToolExecution_runId_idx" ON "AgentToolExecution"("runId");
+CREATE INDEX IF NOT EXISTS "AgentPendingAction_runId_idx" ON "AgentPendingAction"("runId");
+CREATE INDEX IF NOT EXISTS "AgentPendingAction_projectId_idx" ON "AgentPendingAction"("projectId");
+CREATE INDEX IF NOT EXISTS "AgentPendingAction_documentId_idx" ON "AgentPendingAction"("documentId");
 CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_projectId_idx" ON "AgentMemoryEntry"("projectId");
 CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_documentId_idx" ON "AgentMemoryEntry"("documentId");
 CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_runId_idx" ON "AgentMemoryEntry"("runId");
@@ -194,6 +216,39 @@ BEGIN
     ALTER TABLE "AgentToolExecution"
       ADD CONSTRAINT "AgentToolExecution_runId_fkey"
       FOREIGN KEY ("runId") REFERENCES "AgentRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentPendingAction_runId_fkey'
+  ) THEN
+    ALTER TABLE "AgentPendingAction"
+      ADD CONSTRAINT "AgentPendingAction_runId_fkey"
+      FOREIGN KEY ("runId") REFERENCES "AgentRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentPendingAction_projectId_fkey'
+  ) THEN
+    ALTER TABLE "AgentPendingAction"
+      ADD CONSTRAINT "AgentPendingAction_projectId_fkey"
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentPendingAction_documentId_fkey'
+  ) THEN
+    ALTER TABLE "AgentPendingAction"
+      ADD CONSTRAINT "AgentPendingAction_documentId_fkey"
+      FOREIGN KEY ("documentId") REFERENCES "ProjectDocument"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
 

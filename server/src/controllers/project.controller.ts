@@ -96,6 +96,26 @@ export const projectController = {
       data: await projectService.getAgentWorkspace(request.user!, getRouteParam(request.params.projectId))
     });
   },
+  async approvePendingAction(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.approvePendingAgentAction(
+        request.user!,
+        getRouteParam(request.params.projectId),
+        getRouteParam(request.params.pendingActionId)
+      )
+    });
+  },
+  async dismissPendingAction(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.dismissPendingAgentAction(
+        request.user!,
+        getRouteParam(request.params.projectId),
+        getRouteParam(request.params.pendingActionId)
+      )
+    });
+  },
   async listTasks(request: Request, response: Response) {
     response.json({
       success: true,
