@@ -68,6 +68,7 @@ model Project {
   documents     ProjectDocument[]
   tasks         ProjectTask[]
   riskFlags     ProjectRiskFlag[]
+  comments      ProjectComment[]
   documentProcessingRuns DocumentProcessingRun[]
   documentChunks DocumentChunk[]
   agentRuns     AgentRun[]
@@ -138,11 +139,28 @@ model ProjectDocument {
   processingRuns DocumentProcessingRun[]
   generatedTasks ProjectTask[]
   generatedRiskFlags ProjectRiskFlag[]
+  generatedComments ProjectComment[]
   chunks DocumentChunk[]
   agentRuns AgentRun[]
   agentMemoryEntries AgentMemoryEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ProjectComment {
+  id               String   @id @default(cuid())
+  projectId        String
+  sourceDocumentId String?
+  authorName       String
+  body             String
+  createdByAgent   Boolean  @default(false)
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDocument   ProjectDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([sourceDocumentId])
 }
 
 model DocumentChunk {
@@ -217,6 +235,7 @@ model AgentRun {
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   document   ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   steps      AgentStep[]
+  toolExecutions AgentToolExecution[]
   memoryEntries AgentMemoryEntry[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -235,6 +254,22 @@ model AgentStep {
   run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([runId])
+}
+
+model AgentToolExecution {
+  id            String   @id @default(cuid())
+  runId          String
+  toolName       String
+  status         String   @default("completed")
+  title          String
+  resultSummary  String?
+  inputJson      String?
+  outputJson     String?
+  run            AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([runId])
 }

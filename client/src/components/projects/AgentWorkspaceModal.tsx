@@ -14,7 +14,15 @@ import { useNavigate } from "react-router-dom";
 
 import { updateProjectRiskFlagStatus, updateProjectTaskStatus } from "../../api/projects";
 import { useFeedbackContext } from "../../context/FeedbackContext";
-import type { AgentMemoryEntry, AgentRun, DocumentProcessingRun, ProjectRiskFlag, ProjectTask } from "../../types/project";
+import type {
+  AgentMemoryEntry,
+  AgentRun,
+  AgentToolExecution,
+  DocumentProcessingRun,
+  ProjectComment,
+  ProjectRiskFlag,
+  ProjectTask
+} from "../../types/project";
 import { formatDateTime } from "../../utils/formatDate";
 
 interface AgentWorkspaceModalProps {
@@ -22,8 +30,10 @@ interface AgentWorkspaceModalProps {
   onClose: () => void;
   tasks: ProjectTask[];
   riskFlags: ProjectRiskFlag[];
+  comments: ProjectComment[];
   processingRuns: DocumentProcessingRun[];
   agentRuns: AgentRun[];
+  toolExecutions: AgentToolExecution[];
   memoryEntries: AgentMemoryEntry[];
 }
 
@@ -32,8 +42,10 @@ export function AgentWorkspaceModal({
   onClose,
   tasks,
   riskFlags,
+  comments,
   processingRuns,
   agentRuns,
+  toolExecutions,
   memoryEntries
 }: AgentWorkspaceModalProps) {
   const navigate = useNavigate();
@@ -131,7 +143,7 @@ export function AgentWorkspaceModal({
                 Agent Workspace
               </Typography>
               <Typography sx={{ mt: 1, fontSize: "1rem", color: "#42536D" }}>
-                Review generated tasks, risk flags, and recent document-processing runs.
+                Review generated tasks, risk flags, tool executions, and recent document-processing runs.
               </Typography>
             </Box>
             <IconButton onClick={onClose} sx={{ color: "#707975" }}>
@@ -146,7 +158,7 @@ export function AgentWorkspaceModal({
               maxHeight: "calc(90vh - 112px)",
               overflowY: "auto",
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", xl: "repeat(4, minmax(0, 1fr))" },
+              gridTemplateColumns: { xs: "1fr", xl: "repeat(6, minmax(0, 1fr))" },
               gap: 3
             }}
           >
@@ -319,6 +331,64 @@ export function AgentWorkspaceModal({
 
             <Stack spacing={2}>
               <Stack direction="row" spacing={1} alignItems="center">
+                <AutorenewRoundedIcon sx={{ color: "#046B5E" }} />
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Tool Executions</Typography>
+              </Stack>
+              {toolExecutions.length > 0 ? (
+                toolExecutions.slice(0, 8).map((execution) => {
+                  const parsedInput =
+                    execution.inputJson && execution.inputJson.length > 0
+                      ? execution.inputJson
+                      : undefined;
+                  const parsedOutput =
+                    execution.outputJson && execution.outputJson.length > 0
+                      ? execution.outputJson
+                      : undefined;
+
+                  return (
+                    <Paper key={execution.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#F9FCFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                      <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {execution.toolName.replace(/_/g, " ")} • {execution.status}
+                      </Typography>
+                      <Typography sx={{ mt: 0.35, fontSize: "0.92rem", fontWeight: 800, color: "#00342B" }}>
+                        {execution.title}
+                      </Typography>
+                      {execution.resultSummary ? (
+                        <Typography sx={{ mt: 0.55, fontSize: "0.84rem", lineHeight: 1.6, color: "#42536D" }}>
+                          {execution.resultSummary}
+                        </Typography>
+                      ) : null}
+                      {parsedInput ? (
+                        <Box sx={{ mt: 0.9 }}>
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Inputs
+                          </Typography>
+                          <Typography sx={{ mt: 0.3, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84", wordBreak: "break-word" }}>
+                            {parsedInput}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                      {parsedOutput ? (
+                        <Box sx={{ mt: 0.9 }}>
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Result
+                          </Typography>
+                          <Typography sx={{ mt: 0.3, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84", wordBreak: "break-word" }}>
+                            {parsedOutput}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                      <Typography sx={{ mt: 0.8, fontSize: "0.76rem", color: "#7A869F" }}>{formatDateTime(execution.updatedAt)}</Typography>
+                    </Paper>
+                  );
+                })
+              ) : (
+                <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No executed tools have been recorded yet.</Typography>
+              )}
+            </Stack>
+
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
                 <WarningAmberRoundedIcon sx={{ color: "#046B5E" }} />
                 <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Project Memory</Typography>
               </Stack>
@@ -335,6 +405,28 @@ export function AgentWorkspaceModal({
                 ))
               ) : (
                 <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No reusable project memory has been stored yet.</Typography>
+              )}
+            </Stack>
+
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Agent Notes</Typography>
+              </Stack>
+              {comments.length > 0 ? (
+                comments.slice(0, 6).map((comment) => (
+                  <Paper key={comment.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#FFFFFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                    <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                      {comment.authorName} {comment.createdByAgent ? "• agent" : ""}
+                    </Typography>
+                    <Typography sx={{ mt: 0.55, fontSize: "0.86rem", lineHeight: 1.6, color: "#42536D" }}>
+                      {comment.body}
+                    </Typography>
+                    <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#7A869F" }}>{formatDateTime(comment.updatedAt)}</Typography>
+                  </Paper>
+                ))
+              ) : (
+                <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No agent notes have been posted yet.</Typography>
               )}
             </Stack>
           </Box>

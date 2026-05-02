@@ -185,6 +185,35 @@ type ProjectDocumentAgentAnalysis = {
   source: "claude" | "fallback";
 };
 
+type ProjectDocumentClassification = {
+  documentType: string;
+  confidence: "low" | "medium" | "high";
+  rationale: string;
+  source: "claude" | "fallback";
+};
+
+type ProjectDocumentRiskAnalysis = {
+  keyRisks: Array<{
+    level: "low" | "medium" | "high";
+    title: string;
+    description: string;
+  }>;
+  source: "claude" | "fallback";
+};
+
+type ProjectDocumentActionPlan = {
+  summary: string;
+  suggestedAssignee?: string;
+  actionItems: Array<{
+    title: string;
+    description: string;
+    assignee?: string;
+  }>;
+  projectComment: string;
+  changeOrderFollowUp?: string;
+  source: "claude" | "fallback";
+};
+
 function buildProjectDocumentAgentFallback(input: {
   project: ProjectRecord;
   document: ProjectDocumentRecord;
@@ -240,6 +269,229 @@ function buildProjectDocumentAgentFallback(input: {
     keyRisks: keyRisks.slice(0, 3),
     source: "fallback"
   };
+}
+
+function buildProjectDocumentClassificationFallback(input: {
+  document: ProjectDocumentRecord;
+  extractedText?: string;
+}): ProjectDocumentClassification {
+  const normalized = `${input.document.title} ${input.document.kind} ${input.document.summary} ${input.extractedText ?? ""}`.toLowerCase();
+
+  let documentType = "general construction record";
+
+  if (["field", "walkthrough", "coordination", "memo", "daily report"].some((keyword) => normalized.includes(keyword))) {
+    documentType = "field coordination memo";
+  } else if (["drawing", "plan", "layout", "dwg", "spec"].some((keyword) => normalized.includes(keyword))) {
+    documentType = "drawing or specification package";
+  } else if (["quote", "pricing", "invoice", "budget"].some((keyword) => normalized.includes(keyword))) {
+    documentType = "commercial pricing document";
+  } else if (["inspection", "report", "finding"].some((keyword) => normalized.includes(keyword))) {
+    documentType = "inspection or field report";
+  }
+
+  return {
+    documentType,
+    confidence: input.extractedText ? "medium" : "low",
+    rationale: input.extractedText
+      ? "Classification was inferred from the uploaded text and document metadata."
+      : "Classification relied mostly on document metadata because extractable text was limited.",
+    source: "fallback"
+  };
+}
+
+function buildProjectDocumentClassificationPrompt(input: {
+  document: ProjectDocumentRecord;
+  extractedText?: string;
+}) {
+  return [
+    "You are classifying a construction project document for ChangeFlow.",
+    "Return strict JSON only with this shape:",
+    '{"documentType":"string","confidence":"low|medium|high","rationale":"string"}',
+    "Pick a practical operational type such as field coordination memo, drawing package, inspection report, commercial quote, contract addendum, schedule update, safety report, or submittal.",
+    `Document title: ${input.document.title}`,
+    `Document kind: ${input.document.kind}`,
+    `Existing summary: ${input.document.summary}`,
+    input.extractedText ? `Extracted text:\n${input.extractedText.slice(0, 10000)}` : "Extracted text: unavailable"
+  ].join("\n");
+}
+
+function parseProjectDocumentClassification(text: string | undefined): Omit<ProjectDocumentClassification, "source"> | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const normalizedText = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
+
+  try {
+    const parsed = JSON.parse(normalizedText) as Partial<ProjectDocumentClassification>;
+
+    if (
+      typeof parsed.documentType !== "string" ||
+      !parsed.documentType.trim() ||
+      (parsed.confidence !== "low" && parsed.confidence !== "medium" && parsed.confidence !== "high") ||
+      typeof parsed.rationale !== "string" ||
+      parsed.rationale.trim().length < 8
+    ) {
+      return undefined;
+    }
+
+    return {
+      documentType: parsed.documentType.trim(),
+      confidence: parsed.confidence,
+      rationale: parsed.rationale.trim()
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function buildProjectDocumentRiskPrompt(input: {
+  project: ProjectRecord;
+  document: ProjectDocumentRecord;
+  classification: ProjectDocumentClassification;
+  extractedText?: string;
+}) {
+  return [
+    "You are performing risk analysis on a construction project document for ChangeFlow.",
+    "Return strict JSON only with this shape:",
+    '{"keyRisks":[{"level":"low|medium|high","title":"string","description":"string"}]}',
+    "Return 0 to 3 risks. Only include meaningful operational, commercial, schedule, or coordination risks.",
+    `Project: ${input.project.name} | location=${input.project.location} | status=${input.project.status}`,
+    `Document type classification: ${input.classification.documentType} (${input.classification.confidence})`,
+    `Document title: ${input.document.title}`,
+    `Existing summary: ${input.document.summary}`,
+    input.extractedText ? `Extracted text:\n${input.extractedText.slice(0, 10000)}` : "Extracted text: unavailable"
+  ].join("\n");
+}
+
+function parseProjectDocumentRiskAnalysis(text: string | undefined): Omit<ProjectDocumentRiskAnalysis, "source"> | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const normalizedText = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
+
+  try {
+    const parsed = JSON.parse(normalizedText) as Partial<ProjectDocumentRiskAnalysis>;
+    const keyRisks = Array.isArray(parsed.keyRisks)
+      ? parsed.keyRisks
+          .filter(
+            (item): item is { level: "low" | "medium" | "high"; title: string; description: string } =>
+              Boolean(item) &&
+              typeof item === "object" &&
+              (item.level === "low" || item.level === "medium" || item.level === "high") &&
+              typeof item.title === "string" &&
+              typeof item.description === "string"
+          )
+          .map((item) => ({
+            level: item.level,
+            title: item.title.trim(),
+            description: item.description.trim()
+          }))
+          .filter((item) => item.title && item.description)
+          .slice(0, 3)
+      : [];
+
+    return { keyRisks };
+  } catch {
+    return undefined;
+  }
+}
+
+function buildProjectDocumentActionPlanPrompt(input: {
+  project: ProjectRecord;
+  document: ProjectDocumentRecord;
+  teamMembers: ProjectTeamMemberRecord[];
+  changeOrders: ChangeOrderRecord[];
+  classification: ProjectDocumentClassification;
+  riskAnalysis: ProjectDocumentRiskAnalysis;
+  extractedText?: string;
+  memoryEntries?: Array<{ kind: string; title: string; content: string }>;
+}) {
+  const teamRoster = input.teamMembers.map((member) => `- ${member.name} | role=${member.role}`).join("\n");
+  const relatedChangeOrders = input.changeOrders
+    .slice(0, 5)
+    .map((changeOrder) => `- ${changeOrder.title} | status=${changeOrder.status} | amount=$${changeOrder.amount.toLocaleString()}`)
+    .join("\n");
+  const memory = (input.memoryEntries ?? [])
+    .slice(0, 5)
+    .map((entry) => `- ${entry.kind}: ${entry.title} | ${entry.content}`)
+    .join("\n");
+
+  return [
+    "You are planning next actions for a construction project document in ChangeFlow.",
+    "Return strict JSON only with this shape:",
+    '{"summary":"string","suggestedAssignee":"string","projectComment":"string","changeOrderFollowUp":"string","actionItems":[{"title":"string","description":"string","assignee":"string"}]}',
+    "Rules:",
+    "- summary should be 1 or 2 sentences.",
+    "- actionItems should contain 1 to 3 concrete next steps.",
+    "- projectComment should be immediately useful to a PM opening the project.",
+    "- changeOrderFollowUp should be empty if not needed.",
+    "- Prefer assignees from the provided team roster.",
+    `Project: ${input.project.name} | status=${input.project.status} | location=${input.project.location}`,
+    `Document type classification: ${input.classification.documentType} (${input.classification.confidence})`,
+    `Document title: ${input.document.title}`,
+    `Existing summary: ${input.document.summary}`,
+    `Risks:\n${input.riskAnalysis.keyRisks.map((risk) => `- ${risk.level}: ${risk.title} | ${risk.description}`).join("\n") || "- none"}`,
+    teamRoster ? `On-site team:\n${teamRoster}` : "On-site team:\n- none",
+    relatedChangeOrders ? `Related change orders:\n${relatedChangeOrders}` : "Related change orders:\n- none",
+    memory ? `Relevant project memory:\n${memory}` : "Relevant project memory:\n- none",
+    input.extractedText ? `Extracted text:\n${input.extractedText.slice(0, 10000)}` : "Extracted text: unavailable"
+  ].join("\n");
+}
+
+function parseProjectDocumentActionPlan(text: string | undefined): Omit<ProjectDocumentActionPlan, "source"> | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const normalizedText = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
+
+  try {
+    const parsed = JSON.parse(normalizedText) as Partial<ProjectDocumentActionPlan>;
+    const actionItems = Array.isArray(parsed.actionItems)
+      ? parsed.actionItems
+          .filter(
+            (item): item is { title: string; description: string; assignee?: string } =>
+              Boolean(item) &&
+              typeof item === "object" &&
+              typeof item.title === "string" &&
+              typeof item.description === "string"
+          )
+          .map((item) => ({
+            title: item.title.trim(),
+            description: item.description.trim(),
+            assignee: typeof item.assignee === "string" && item.assignee.trim() ? item.assignee.trim() : undefined
+          }))
+          .filter((item) => item.title && item.description)
+          .slice(0, 3)
+      : [];
+
+    if (
+      typeof parsed.summary !== "string" ||
+      parsed.summary.trim().length < 10 ||
+      typeof parsed.projectComment !== "string" ||
+      parsed.projectComment.trim().length < 10
+    ) {
+      return undefined;
+    }
+
+    return {
+      summary: parsed.summary.trim(),
+      suggestedAssignee:
+        typeof parsed.suggestedAssignee === "string" && parsed.suggestedAssignee.trim()
+          ? parsed.suggestedAssignee.trim()
+          : undefined,
+      projectComment: parsed.projectComment.trim(),
+      changeOrderFollowUp:
+        typeof parsed.changeOrderFollowUp === "string" && parsed.changeOrderFollowUp.trim()
+          ? parsed.changeOrderFollowUp.trim()
+          : undefined,
+      actionItems
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function buildProjectDocumentAgentPrompt(input: {
@@ -599,6 +851,148 @@ export const aiSummaryService = {
       });
 
       return fallbackAnalysis;
+    }
+  },
+  async classifyProjectDocument(input: {
+    document: ProjectDocumentRecord;
+    extractedText?: string;
+  }) {
+    const fallbackClassification = buildProjectDocumentClassificationFallback(input);
+
+    if (!env.ANTHROPIC_API_KEY) {
+      return fallbackClassification;
+    }
+
+    try {
+      const responseText = await requestClaudeText(buildProjectDocumentClassificationPrompt(input), 220);
+      const parsedClassification = parseProjectDocumentClassification(responseText);
+
+      if (!parsedClassification) {
+        logger.warn("Claude document classification response was invalid JSON. Falling back to local classification.", {
+          model: env.ANTHROPIC_MODEL,
+          response: responseText?.slice(0, 500)
+        });
+
+        return fallbackClassification;
+      }
+
+      return {
+        ...parsedClassification,
+        source: "claude" as const
+      };
+    } catch (error) {
+      logger.warn("Claude document classification failed. Falling back to local classification.", {
+        model: env.ANTHROPIC_MODEL,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return fallbackClassification;
+    }
+  },
+  async analyzeProjectDocumentRisks(input: {
+    project: ProjectRecord;
+    document: ProjectDocumentRecord;
+    classification: ProjectDocumentClassification;
+    extractedText?: string;
+  }) {
+    const fallbackAnalysis = buildProjectDocumentAgentFallback({
+      project: input.project,
+      document: input.document,
+      teamMembers: [],
+      changeOrders: [],
+      extractedText: input.extractedText
+    });
+    const fallbackRiskAnalysis: ProjectDocumentRiskAnalysis = {
+      keyRisks: fallbackAnalysis.keyRisks,
+      source: "fallback"
+    };
+
+    if (!env.ANTHROPIC_API_KEY) {
+      return fallbackRiskAnalysis;
+    }
+
+    try {
+      const responseText = await requestClaudeText(buildProjectDocumentRiskPrompt(input), 360);
+      const parsedRiskAnalysis = parseProjectDocumentRiskAnalysis(responseText);
+
+      if (!parsedRiskAnalysis) {
+        logger.warn("Claude risk analysis response was invalid JSON. Falling back to local risk analysis.", {
+          model: env.ANTHROPIC_MODEL,
+          response: responseText?.slice(0, 500)
+        });
+
+        return fallbackRiskAnalysis;
+      }
+
+      return {
+        ...parsedRiskAnalysis,
+        source: "claude" as const
+      };
+    } catch (error) {
+      logger.warn("Claude risk analysis failed. Falling back to local risk analysis.", {
+        model: env.ANTHROPIC_MODEL,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return fallbackRiskAnalysis;
+    }
+  },
+  async planProjectDocumentActions(input: {
+    project: ProjectRecord;
+    document: ProjectDocumentRecord;
+    teamMembers: ProjectTeamMemberRecord[];
+    changeOrders: ChangeOrderRecord[];
+    classification: ProjectDocumentClassification;
+    riskAnalysis: ProjectDocumentRiskAnalysis;
+    extractedText?: string;
+    memoryEntries?: Array<{ kind: string; title: string; content: string }>;
+  }) {
+    const fallbackAnalysis = buildProjectDocumentAgentFallback({
+      project: input.project,
+      document: input.document,
+      teamMembers: input.teamMembers,
+      changeOrders: input.changeOrders,
+      extractedText: input.extractedText
+    });
+    const fallbackPlan: ProjectDocumentActionPlan = {
+      summary: fallbackAnalysis.summary,
+      suggestedAssignee: fallbackAnalysis.suggestedAssignee,
+      actionItems: fallbackAnalysis.actionItems,
+      projectComment: `${fallbackAnalysis.summary} ${fallbackAnalysis.keyRisks.length > 0 ? `Watchouts: ${fallbackAnalysis.keyRisks.map((risk) => risk.title).join(", ")}.` : ""}`.trim(),
+      changeOrderFollowUp: fallbackAnalysis.keyRisks.some((risk) => risk.description.toLowerCase().includes("cost"))
+        ? "Review whether this document should trigger a new or updated change-order workflow."
+        : undefined,
+      source: "fallback"
+    };
+
+    if (!env.ANTHROPIC_API_KEY) {
+      return fallbackPlan;
+    }
+
+    try {
+      const responseText = await requestClaudeText(buildProjectDocumentActionPlanPrompt(input), 520);
+      const parsedPlan = parseProjectDocumentActionPlan(responseText);
+
+      if (!parsedPlan) {
+        logger.warn("Claude action plan response was invalid JSON. Falling back to local action plan.", {
+          model: env.ANTHROPIC_MODEL,
+          response: responseText?.slice(0, 500)
+        });
+
+        return fallbackPlan;
+      }
+
+      return {
+        ...parsedPlan,
+        source: "claude" as const
+      };
+    } catch (error) {
+      logger.warn("Claude action planning failed. Falling back to local action plan.", {
+        model: env.ANTHROPIC_MODEL,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return fallbackPlan;
     }
   },
   async answerProjectQuestion(input: {

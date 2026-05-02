@@ -113,6 +113,17 @@ export interface ProjectRiskFlagRecord {
   updatedAt: string;
 }
 
+export interface ProjectCommentRecord {
+  id: string;
+  projectId: string;
+  sourceDocumentId?: string;
+  authorName: string;
+  body: string;
+  createdByAgent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DocumentProcessingRunRecord {
   id: string;
   projectId: string;
@@ -132,6 +143,19 @@ export interface AgentStepRecord {
   status: string;
   title: string;
   details?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentToolExecutionRecord {
+  id: string;
+  runId: string;
+  toolName: string;
+  status: string;
+  title: string;
+  resultSummary?: string;
+  inputJson?: string;
+  outputJson?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -176,8 +200,10 @@ export interface DocumentChunkRecord {
 export interface ProjectAgentWorkspaceRecord {
   tasks: ProjectTaskRecord[];
   riskFlags: ProjectRiskFlagRecord[];
+  comments: ProjectCommentRecord[];
   processingRuns: DocumentProcessingRunRecord[];
   agentRuns: AgentRunRecord[];
+  toolExecutions: AgentToolExecutionRecord[];
   memoryEntries: AgentMemoryEntryRecord[];
 }
 

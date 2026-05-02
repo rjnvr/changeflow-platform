@@ -4,26 +4,17 @@ import { documentProcessingRunRepository } from "../repositories/documentProcess
 import { projectDocumentRepository } from "../repositories/projectDocument.repository.js";
 import { projectRiskFlagRepository } from "../repositories/projectRiskFlag.repository.js";
 import { projectTaskRepository } from "../repositories/projectTask.repository.js";
+import { projectCommentRepository } from "../repositories/projectComment.repository.js";
 import { documentChunkRepository } from "../repositories/documentChunk.repository.js";
 import { agentMemoryEntryRepository } from "../repositories/agentMemoryEntry.repository.js";
 import { agentRunRepository } from "../repositories/agentRun.repository.js";
 import type { ProjectDocumentRecord, ProjectRecord, ProjectTeamMemberRecord } from "../types/domain.js";
-import { aiSummaryService } from "./aiSummary.service.js";
+import { agentOrchestratorService } from "./agentOrchestrator.service.js";
 import { auditLogService } from "./auditLog.service.js";
 import { env } from "../config/env.js";
 import { documentExtractionService } from "./documentExtraction.service.js";
 import { embeddingService } from "./embedding.service.js";
 import { ragService } from "./rag.service.js";
-
-function normalizeAssignee(candidate: string | undefined, teamMembers: ProjectTeamMemberRecord[]) {
-  if (!candidate?.trim()) {
-    return undefined;
-  }
-
-  const normalizedCandidate = candidate.trim().toLowerCase();
-  const match = teamMembers.find((member) => member.name.trim().toLowerCase() === normalizedCandidate);
-  return match?.name ?? candidate.trim();
-}
 
 function isAgentHistoryStorageError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -102,6 +93,7 @@ export const documentAgentService = {
       await Promise.all([
         projectTaskRepository.deleteAgentTasksForDocument(project.id, document.id),
         projectRiskFlagRepository.deleteAgentRiskFlagsForDocument(project.id, document.id),
+        projectCommentRepository.deleteAgentCommentsForDocument(project.id, document.id),
         agentMemoryEntryRepository.deleteForDocument(project.id, document.id).catch((error: unknown) => {
           if (!isAgentHistoryStorageError(error)) {
             throw error;
@@ -182,112 +174,41 @@ export const documentAgentService = {
       }
 
       const changeOrders = await changeOrderRepository.list(project.id, { includeArchived: true });
-      const analysis = await aiSummaryService.analyzeProjectDocument({
+      const memoryEntries = await agentMemoryEntryRepository.listByProject(project.id).catch((error: unknown) => {
+        if (!isAgentHistoryStorageError(error)) {
+          throw error;
+        }
+
+        return [];
+      });
+      const orchestration = await agentOrchestratorService.runDocumentFlow({
         project,
         document,
         teamMembers,
         changeOrders,
-        extractedText
+        extractedText,
+        memoryEntries,
+        agentRunId: agentRun?.id
       });
-
-      if (agentRun) {
-        await agentRunRepository.addStep({
-          runId: agentRun.id,
-          stepType: "analysis",
-          status: "completed",
-          title: "Analyzed document with agent reasoning",
-          details: `${analysis.source === "claude" ? "Claude" : "Fallback logic"} produced ${analysis.actionItems.length} action item${analysis.actionItems.length === 1 ? "" : "s"} and ${analysis.keyRisks.length} risk flag${analysis.keyRisks.length === 1 ? "" : "s"}.`
-        });
-      }
-
-      const assignedTo = normalizeAssignee(analysis.suggestedAssignee ?? document.assignedTo, teamMembers);
-
       const updatedDocument = await projectDocumentRepository.update(project.id, document.id, {
         title: document.title,
         kind: document.kind,
-        summary: analysis.summary,
-        aiSummary: analysis.summary,
+        summary: orchestration.actionPlan.summary,
+        aiSummary: orchestration.actionPlan.summary,
         agentStatus: "completed",
         processingError: "",
         lastProcessedAt: new Date().toISOString(),
-        assignedTo,
+        assignedTo: orchestration.assignedTo,
         url: document.url
       });
 
-      const createdTasks = await Promise.all(
-        analysis.actionItems.map((item) =>
-            projectTaskRepository.create({
-              projectId: project.id,
-              sourceDocumentId: document.id,
-              title: item.title,
-              description: item.description,
-              status: "suggested",
-              assignedTo: normalizeAssignee(item.assignee ?? assignedTo, teamMembers),
-              createdByAgent: true
-            })
-        )
-      );
-
-      const createdRiskFlags = await Promise.all(
-        analysis.keyRisks.map((item) =>
-            projectRiskFlagRepository.create({
-              projectId: project.id,
-              sourceDocumentId: document.id,
-              level: item.level,
-              title: item.title,
-              description: item.description,
-              status: "open",
-              createdByAgent: true
-            })
-        )
-      );
-
       if (agentRun) {
-        await agentRunRepository.addStep({
-          runId: agentRun.id,
-          stepType: "actions",
-          status: "completed",
-          title: "Created project follow-up items",
-          details: `Added ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} and ${createdRiskFlags.length} risk flag${createdRiskFlags.length === 1 ? "" : "s"} from the latest document analysis.`
-        });
-
-        await agentMemoryEntryRepository.createMany([
-          {
-            projectId: project.id,
-            documentId: document.id,
-            runId: agentRun.id,
-            kind: "document_summary",
-            title: document.title,
-            content: analysis.summary
-          },
-          ...analysis.actionItems.map((item) => ({
-            projectId: project.id,
-            documentId: document.id,
-            runId: agentRun.id,
-            kind: "action_item",
-            title: item.title,
-            content: `${item.description}${item.assignee ? ` Assigned to ${item.assignee}.` : ""}`
-          })),
-          ...analysis.keyRisks.map((item) => ({
-            projectId: project.id,
-            documentId: document.id,
-            runId: agentRun.id,
-            kind: "risk_flag",
-            title: item.title,
-            content: `[${item.level.toUpperCase()}] ${item.description}`
-          }))
-        ]).catch((error: unknown) => {
-          if (!isAgentHistoryStorageError(error)) {
-            throw error;
-          }
-        });
-
         await agentRunRepository.addStep({
           runId: agentRun.id,
           stepType: "memory",
           status: "completed",
           title: "Stored project memory entries",
-          details: `Saved summary, action items, and risk context so future agent runs can reuse this document's outcomes.`
+          details: `Saved classification, summary, and execution outputs for future project reasoning.`
         });
       }
 
@@ -299,17 +220,18 @@ export const documentAgentService = {
       if (agentRun) {
         await agentRunRepository.update(agentRun.id, {
           status: "completed",
-          summary: analysis.summary,
-          model: analysis.source === "claude" ? env.ANTHROPIC_MODEL : "fallback"
+          summary: orchestration.actionPlan.summary,
+          model: orchestration.actionPlan.source === "claude" ? env.ANTHROPIC_MODEL : "fallback"
         });
       }
 
       await auditLogService.record("project.document.agent_processed", "projectDocument", document.id, {
         projectId: project.id,
-        taskCount: createdTasks.length,
-        riskCount: createdRiskFlags.length,
+        taskCount: orchestration.createdTasks.length,
+        riskCount: orchestration.createdRiskFlags.length,
         extractionMethod,
-        source: analysis.source
+        source: orchestration.actionPlan.source,
+        documentType: orchestration.classification.documentType
       });
 
       return updatedDocument ?? document;

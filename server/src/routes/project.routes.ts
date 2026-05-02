@@ -64,6 +64,7 @@ projectRouter.post(
 projectRouter.get("/:projectId", asyncHandler(projectController.get));
 projectRouter.get("/:projectId/team", asyncHandler(projectController.listTeamMembers));
 projectRouter.get("/:projectId/documents", asyncHandler(projectController.listDocuments));
+projectRouter.get("/:projectId/comments", asyncHandler(projectController.listComments));
 projectRouter.get("/:projectId/agent-workspace", asyncHandler(projectController.getAgentWorkspace));
 projectRouter.post("/:projectId/questions", validate(askProjectQuestionSchema), asyncHandler(projectController.askQuestion));
 projectRouter.get("/:projectId/documents/:documentId/download-url", asyncHandler(projectController.getDocumentDownloadUrl));

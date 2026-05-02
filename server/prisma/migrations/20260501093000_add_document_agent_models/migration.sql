@@ -32,6 +32,18 @@ CREATE TABLE IF NOT EXISTS "ProjectRiskFlag" (
   CONSTRAINT "ProjectRiskFlag_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE IF NOT EXISTS "ProjectComment" (
+  "id" TEXT NOT NULL,
+  "projectId" TEXT NOT NULL,
+  "sourceDocumentId" TEXT,
+  "authorName" TEXT NOT NULL,
+  "body" TEXT NOT NULL,
+  "createdByAgent" BOOLEAN NOT NULL DEFAULT false,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ProjectComment_pkey" PRIMARY KEY ("id")
+);
+
 CREATE TABLE IF NOT EXISTS "DocumentProcessingRun" (
   "id" TEXT NOT NULL,
   "projectId" TEXT NOT NULL,
@@ -83,6 +95,20 @@ CREATE TABLE IF NOT EXISTS "AgentStep" (
   CONSTRAINT "AgentStep_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE IF NOT EXISTS "AgentToolExecution" (
+  "id" TEXT NOT NULL,
+  "runId" TEXT NOT NULL,
+  "toolName" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'completed',
+  "title" TEXT NOT NULL,
+  "resultSummary" TEXT,
+  "inputJson" TEXT,
+  "outputJson" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AgentToolExecution_pkey" PRIMARY KEY ("id")
+);
+
 CREATE TABLE IF NOT EXISTS "AgentMemoryEntry" (
   "id" TEXT NOT NULL,
   "projectId" TEXT NOT NULL,
@@ -102,6 +128,8 @@ ADD COLUMN IF NOT EXISTS "embeddingModel" TEXT;
 
 CREATE INDEX IF NOT EXISTS "ProjectTask_projectId_idx" ON "ProjectTask"("projectId");
 CREATE INDEX IF NOT EXISTS "ProjectRiskFlag_projectId_idx" ON "ProjectRiskFlag"("projectId");
+CREATE INDEX IF NOT EXISTS "ProjectComment_projectId_idx" ON "ProjectComment"("projectId");
+CREATE INDEX IF NOT EXISTS "ProjectComment_sourceDocumentId_idx" ON "ProjectComment"("sourceDocumentId");
 CREATE INDEX IF NOT EXISTS "DocumentProcessingRun_projectId_idx" ON "DocumentProcessingRun"("projectId");
 CREATE INDEX IF NOT EXISTS "DocumentProcessingRun_documentId_idx" ON "DocumentProcessingRun"("documentId");
 CREATE INDEX IF NOT EXISTS "DocumentChunk_projectId_idx" ON "DocumentChunk"("projectId");
@@ -109,6 +137,7 @@ CREATE INDEX IF NOT EXISTS "DocumentChunk_documentId_idx" ON "DocumentChunk"("do
 CREATE INDEX IF NOT EXISTS "AgentRun_projectId_idx" ON "AgentRun"("projectId");
 CREATE INDEX IF NOT EXISTS "AgentRun_documentId_idx" ON "AgentRun"("documentId");
 CREATE INDEX IF NOT EXISTS "AgentStep_runId_idx" ON "AgentStep"("runId");
+CREATE INDEX IF NOT EXISTS "AgentToolExecution_runId_idx" ON "AgentToolExecution"("runId");
 CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_projectId_idx" ON "AgentMemoryEntry"("projectId");
 CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_documentId_idx" ON "AgentMemoryEntry"("documentId");
 CREATE INDEX IF NOT EXISTS "AgentMemoryEntry_runId_idx" ON "AgentMemoryEntry"("runId");
@@ -160,6 +189,17 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AgentToolExecution_runId_fkey'
+  ) THEN
+    ALTER TABLE "AgentToolExecution"
+      ADD CONSTRAINT "AgentToolExecution_runId_fkey"
+      FOREIGN KEY ("runId") REFERENCES "AgentRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'AgentMemoryEntry_projectId_fkey'
   ) THEN
     ALTER TABLE "AgentMemoryEntry"
@@ -187,6 +227,28 @@ BEGIN
     ALTER TABLE "AgentMemoryEntry"
       ADD CONSTRAINT "AgentMemoryEntry_runId_fkey"
       FOREIGN KEY ("runId") REFERENCES "AgentRun"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ProjectComment_projectId_fkey'
+  ) THEN
+    ALTER TABLE "ProjectComment"
+      ADD CONSTRAINT "ProjectComment_projectId_fkey"
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ProjectComment_sourceDocumentId_fkey'
+  ) THEN
+    ALTER TABLE "ProjectComment"
+      ADD CONSTRAINT "ProjectComment_sourceDocumentId_fkey"
+      FOREIGN KEY ("sourceDocumentId") REFERENCES "ProjectDocument"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
 

@@ -1,7 +1,7 @@
 import { projectRepository } from "../repositories/project.repository.js";
 import { projectDocumentRepository } from "../repositories/projectDocument.repository.js";
 import { projectTeamMemberRepository } from "../repositories/projectTeamMember.repository.js";
-import type { AgentMemoryEntryRecord, AgentRunRecord, AuthenticatedUser } from "../types/domain.js";
+import type { AgentMemoryEntryRecord, AgentRunRecord, AgentToolExecutionRecord, AuthenticatedUser } from "../types/domain.js";
 import { ApiError } from "../utils/apiError.js";
 import { changeOrderRepository } from "../repositories/changeOrder.repository.js";
 import { projectAccessRepository } from "../repositories/projectAccess.repository.js";
@@ -9,9 +9,11 @@ import { projectAccessRequestRepository } from "../repositories/projectAccessReq
 import { projectBriefGenerationRepository } from "../repositories/projectBriefGeneration.repository.js";
 import { projectRiskFlagRepository } from "../repositories/projectRiskFlag.repository.js";
 import { projectTaskRepository } from "../repositories/projectTask.repository.js";
+import { projectCommentRepository } from "../repositories/projectComment.repository.js";
 import { documentProcessingRunRepository } from "../repositories/documentProcessingRun.repository.js";
 import { agentMemoryEntryRepository } from "../repositories/agentMemoryEntry.repository.js";
 import { agentRunRepository } from "../repositories/agentRun.repository.js";
+import { agentToolExecutionRepository } from "../repositories/agentToolExecution.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { auditLogService } from "./auditLog.service.js";
 import { projectAccessService } from "./projectAccess.service.js";
@@ -30,7 +32,8 @@ function isAgentHistoryStorageError(error: unknown) {
     error.message.includes("does not exist") ||
     error.message.includes("AgentRun") ||
     error.message.includes("AgentStep") ||
-    error.message.includes("AgentMemoryEntry")
+    error.message.includes("AgentMemoryEntry") ||
+    error.message.includes("AgentToolExecution")
   );
 }
 
@@ -273,22 +276,29 @@ export const projectService = {
     await this.getProject(requestUser, projectId);
     return projectDocumentRepository.listByProject(projectId);
   },
+  async listComments(requestUser: AuthenticatedUser, projectId: string) {
+    await this.getProject(requestUser, projectId);
+    return projectCommentRepository.listByProject(projectId);
+  },
   async getAgentWorkspace(requestUser: AuthenticatedUser, projectId: string) {
     await this.getProject(requestUser, projectId);
 
-    const [tasks, riskFlags, processingRuns] = await Promise.all([
+    const [tasks, riskFlags, comments, processingRuns] = await Promise.all([
       projectTaskRepository.listByProject(projectId),
       projectRiskFlagRepository.listByProject(projectId),
+      projectCommentRepository.listByProject(projectId),
       documentProcessingRunRepository.listByProject(projectId)
     ]);
 
     let agentRuns: AgentRunRecord[] = [];
     let memoryEntries: AgentMemoryEntryRecord[] = [];
+    let toolExecutions: AgentToolExecutionRecord[] = [];
 
     try {
-      [agentRuns, memoryEntries] = await Promise.all([
+      [agentRuns, memoryEntries, toolExecutions] = await Promise.all([
         agentRunRepository.listByProject(projectId),
-        agentMemoryEntryRepository.listByProject(projectId)
+        agentMemoryEntryRepository.listByProject(projectId),
+        agentToolExecutionRepository.listByProject(projectId)
       ]);
     } catch (error) {
       if (!isAgentHistoryStorageError(error)) {
@@ -299,8 +309,10 @@ export const projectService = {
     return {
       tasks,
       riskFlags,
+      comments,
       processingRuns,
       agentRuns,
+      toolExecutions,
       memoryEntries
     };
   },

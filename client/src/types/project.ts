@@ -130,6 +130,17 @@ export interface ProjectRiskFlag {
   updatedAt: string;
 }
 
+export interface ProjectComment {
+  id: string;
+  projectId: string;
+  sourceDocumentId?: string;
+  authorName: string;
+  body: string;
+  createdByAgent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DocumentProcessingRun {
   id: string;
   projectId: string;
@@ -149,6 +160,19 @@ export interface AgentStep {
   status: string;
   title: string;
   details?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentToolExecution {
+  id: string;
+  runId: string;
+  toolName: string;
+  status: string;
+  title: string;
+  resultSummary?: string;
+  inputJson?: string;
+  outputJson?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -181,8 +205,10 @@ export interface AgentMemoryEntry {
 export interface ProjectAgentWorkspace {
   tasks: ProjectTask[];
   riskFlags: ProjectRiskFlag[];
+  comments: ProjectComment[];
   processingRuns: DocumentProcessingRun[];
   agentRuns: AgentRun[];
+  toolExecutions: AgentToolExecution[];
   memoryEntries: AgentMemoryEntry[];
 }
 

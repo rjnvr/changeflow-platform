@@ -41,10 +41,12 @@ import { useProjectTeamMembers } from "../hooks/useProjectTeamMembers";
 import type {
   AgentMemoryEntry,
   AgentRun,
+  AgentToolExecution,
   DocumentProcessingRun,
   Project,
   ProjectAgentWorkspace,
   ProjectAnalyticsBrief,
+  ProjectComment,
   ProjectRiskFlag,
   ProjectQuestionAnswer,
   ProjectTask,
@@ -321,8 +323,10 @@ export function ProjectDetailsPage() {
         ];
   const projectTasks = agentWorkspace?.tasks ?? [];
   const projectRiskFlags = agentWorkspace?.riskFlags ?? [];
+  const projectComments = agentWorkspace?.comments ?? [];
   const latestProcessingRuns = agentWorkspace?.processingRuns.slice(0, 3) ?? [];
   const latestAgentRuns = agentWorkspace?.agentRuns.slice(0, 2) ?? [];
+  const latestToolExecutions = agentWorkspace?.toolExecutions.slice(0, 3) ?? [];
   const latestMemoryEntries = agentWorkspace?.memoryEntries.slice(0, 3) ?? [];
   const impactValue = changeOrders.reduce((total, item) => total + item.amount, 0);
   const utilization = Math.min(64 + changeOrders.length * 4, 92);
@@ -738,7 +742,7 @@ export function ProjectDetailsPage() {
                 <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
               </Stack>
 
-              {latestAgentRuns.length > 0 || latestMemoryEntries.length > 0 ? (
+              {latestAgentRuns.length > 0 || latestMemoryEntries.length > 0 || latestToolExecutions.length > 0 ? (
                 <Stack spacing={1.5} sx={{ mb: 2.6 }}>
                   {latestAgentRuns.map((run: AgentRun) => (
                     <Paper
@@ -767,6 +771,33 @@ export function ProjectDetailsPage() {
                       {entry.title}
                     </Typography>
                   ))}
+                  {latestToolExecutions.length > 0 ? (
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 1.8,
+                        borderRadius: 3,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.9)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
+                        Latest Tool Activity
+                      </Typography>
+                      <Stack spacing={0.8} sx={{ mt: 1 }}>
+                        {latestToolExecutions.map((execution: AgentToolExecution) => (
+                          <Box key={execution.id}>
+                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: "#00342B" }}>
+                              {execution.title}
+                            </Typography>
+                            <Typography sx={{ mt: 0.2, fontSize: "0.78rem", color: "#5A6A84" }}>
+                              {execution.toolName.replace(/_/g, " ")} • {execution.status}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ) : null}
                 </Stack>
               ) : null}
 
@@ -931,6 +962,62 @@ export function ProjectDetailsPage() {
         }}
       >
         <Stack spacing={4}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 5,
+              backgroundColor: "#FFFFFF",
+              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+            }}
+          >
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+              <Typography
+                sx={{
+                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                  fontSize: "1.8rem",
+                  fontWeight: 800,
+                  letterSpacing: -1,
+                  color: "#00342B"
+                }}
+              >
+                Agent Notes
+              </Typography>
+              <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+            </Stack>
+
+            {projectComments.length > 0 ? (
+              <Stack spacing={1.8}>
+                {projectComments.slice(0, 3).map((comment: ProjectComment) => (
+                  <Paper
+                    key={comment.id}
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      borderRadius: 3,
+                      backgroundColor: "#F9FCFF",
+                      border: "1px solid rgba(213,236,248,0.9)"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                      {comment.authorName} {comment.createdByAgent ? "• agent" : ""}
+                    </Typography>
+                    <Typography sx={{ mt: 0.7, fontSize: "0.92rem", lineHeight: 1.65, color: "#42536D" }}>
+                      {comment.body}
+                    </Typography>
+                    <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#7A869F" }}>
+                      {formatDateTime(comment.updatedAt)}
+                    </Typography>
+                  </Paper>
+                ))}
+              </Stack>
+            ) : (
+              <Typography sx={{ fontSize: "0.95rem", lineHeight: 1.65, color: "#5A6A84" }}>
+                Agent notes will appear here when a processed document generates a project-facing summary or follow-up recommendation.
+              </Typography>
+            )}
+          </Paper>
+
           <Paper
             elevation={0}
             sx={{
@@ -1679,8 +1766,10 @@ export function ProjectDetailsPage() {
         onClose={() => setAgentWorkspaceOpen(false)}
         tasks={projectTasks}
         riskFlags={projectRiskFlags}
+        comments={projectComments}
         processingRuns={agentWorkspace?.processingRuns ?? []}
         agentRuns={agentWorkspace?.agentRuns ?? []}
+        toolExecutions={agentWorkspace?.toolExecutions ?? []}
         memoryEntries={agentWorkspace?.memoryEntries ?? []}
       />
     </Stack>

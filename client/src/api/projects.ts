@@ -5,6 +5,7 @@ import type {
   Project,
   ProjectDocument,
   ProjectDocumentUploadIntent,
+  ProjectComment,
   ProjectRiskFlag,
   ProjectQuestionAnswer,
   ProjectTask,
@@ -115,6 +116,10 @@ export function updateProjectTeamMember(
 
 export function getProjectDocuments(projectId: string) {
   return apiRequest<ProjectDocument[]>(`/projects/${projectId}/documents`);
+}
+
+export function getProjectComments(projectId: string) {
+  return apiRequest<ProjectComment[]>(`/projects/${projectId}/comments`);
 }
 
 export function getProjectAgentWorkspace(projectId: string) {

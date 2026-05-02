@@ -84,6 +84,12 @@ export const projectController = {
       data: await projectService.listDocuments(request.user!, getRouteParam(request.params.projectId))
     });
   },
+  async listComments(request: Request, response: Response) {
+    response.json({
+      success: true,
+      data: await projectService.listComments(request.user!, getRouteParam(request.params.projectId))
+    });
+  },
   async getAgentWorkspace(request: Request, response: Response) {
     response.json({
       success: true,
