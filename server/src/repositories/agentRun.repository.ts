@@ -87,6 +87,10 @@ export const agentRunRepository = {
     summary?: string;
     model?: string;
   }) {
+    if (!agentRunClient) {
+      return null;
+    }
+
     const run = await agentRunClient.create({
       data: {
         projectId: input.projectId,
@@ -109,6 +113,10 @@ export const agentRunRepository = {
       model: string;
     }>
   ) {
+    if (!agentRunClient) {
+      return null;
+    }
+
     const run = await agentRunClient.update({
       where: { id: runId },
       data: {
@@ -128,6 +136,10 @@ export const agentRunRepository = {
     title: string;
     details?: string;
   }) {
+    if (!agentStepClient) {
+      return null;
+    }
+
     const step = await agentStepClient.create({
       data: {
         runId: input.runId,
@@ -141,6 +153,10 @@ export const agentRunRepository = {
     return mapStep(step);
   },
   async listByProject(projectId: string) {
+    if (!agentRunClient) {
+      return [];
+    }
+
     const runs = await agentRunClient.findMany({
       where: { projectId },
       include: includeSteps,

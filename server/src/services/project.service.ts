@@ -1,7 +1,7 @@
 import { projectRepository } from "../repositories/project.repository.js";
 import { projectDocumentRepository } from "../repositories/projectDocument.repository.js";
 import { projectTeamMemberRepository } from "../repositories/projectTeamMember.repository.js";
-import type { AuthenticatedUser } from "../types/domain.js";
+import type { AgentMemoryEntryRecord, AgentRunRecord, AuthenticatedUser } from "../types/domain.js";
 import { ApiError } from "../utils/apiError.js";
 import { changeOrderRepository } from "../repositories/changeOrder.repository.js";
 import { projectAccessRepository } from "../repositories/projectAccess.repository.js";
@@ -19,6 +19,20 @@ import { aiSummaryService } from "./aiSummary.service.js";
 import { documentAgentService } from "./documentAgent.service.js";
 import { ragService } from "./rag.service.js";
 import { storageService } from "./storage.service.js";
+
+function isAgentHistoryStorageError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("P2021") ||
+    error.message.includes("does not exist") ||
+    error.message.includes("AgentRun") ||
+    error.message.includes("AgentStep") ||
+    error.message.includes("AgentMemoryEntry")
+  );
+}
 
 function canEditProject(user: AuthenticatedUser, ownerId: string) {
   return user.role === "admin" || user.id === ownerId;
@@ -262,13 +276,25 @@ export const projectService = {
   async getAgentWorkspace(requestUser: AuthenticatedUser, projectId: string) {
     await this.getProject(requestUser, projectId);
 
-    const [tasks, riskFlags, processingRuns, agentRuns, memoryEntries] = await Promise.all([
+    const [tasks, riskFlags, processingRuns] = await Promise.all([
       projectTaskRepository.listByProject(projectId),
       projectRiskFlagRepository.listByProject(projectId),
-      documentProcessingRunRepository.listByProject(projectId),
-      agentRunRepository.listByProject(projectId),
-      agentMemoryEntryRepository.listByProject(projectId)
+      documentProcessingRunRepository.listByProject(projectId)
     ]);
+
+    let agentRuns: AgentRunRecord[] = [];
+    let memoryEntries: AgentMemoryEntryRecord[] = [];
+
+    try {
+      [agentRuns, memoryEntries] = await Promise.all([
+        agentRunRepository.listByProject(projectId),
+        agentMemoryEntryRepository.listByProject(projectId)
+      ]);
+    } catch (error) {
+      if (!isAgentHistoryStorageError(error)) {
+        throw error;
+      }
+    }
 
     return {
       tasks,

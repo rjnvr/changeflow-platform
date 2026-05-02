@@ -583,25 +583,25 @@ export function ProjectDetailsPage() {
             }}
           >
             <Stack
-              direction={{ xs: "column", md: "row" }}
-              justifyContent="space-between"
-              alignItems={{ xs: "flex-start", md: "center" }}
-              spacing={2}
-              sx={{ mb: 3 }}
+              direction="column"
+              justifyContent="center"
+              alignItems="center"
+              spacing={1.6}
+              sx={{ mb: 3.4, textAlign: "center" }}
             >
-              <Box>
+              <Box sx={{ maxWidth: 860 }}>
                 <Typography
                   sx={{
                     fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: "1.8rem",
+                    fontSize: { xs: "2rem", md: "2.45rem" },
                     fontWeight: 800,
-                    letterSpacing: -1,
+                    letterSpacing: -1.2,
                     color: "#00342B"
                   }}
                 >
                   Ask This Project
                 </Typography>
-                <Typography sx={{ mt: 0.8, fontSize: "0.98rem", lineHeight: 1.65, color: "#5A6A84", maxWidth: 760 }}>
+                <Typography sx={{ mt: 0.8, fontSize: "0.98rem", lineHeight: 1.65, color: "#5A6A84", maxWidth: 760, mx: "auto" }}>
                   Ask a grounded question over uploaded project documents. The answer uses stored document chunks and cites the exact evidence it found.
                 </Typography>
               </Box>
@@ -619,7 +619,13 @@ export function ProjectDetailsPage() {
               </ButtonBase>
             </Stack>
 
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "flex-start" }}>
+            <Stack
+              direction="column"
+              spacing={1.6}
+              alignItems="center"
+              justifyContent="center"
+              sx={{ maxWidth: 860, mx: "auto" }}
+            >
               <TextField
                 value={projectQuestion}
                 onChange={(event) => setProjectQuestion(event.target.value)}
@@ -628,6 +634,7 @@ export function ProjectDetailsPage() {
                 minRows={3}
                 fullWidth
                 sx={{
+                  maxWidth: 860,
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 3,
                     backgroundColor: "#F9FCFF"
@@ -638,13 +645,13 @@ export function ProjectDetailsPage() {
                 onClick={() => void handleAskProjectQuestion()}
                 disabled={projectQuestionLoading}
                 sx={{
-                  minWidth: 190,
+                  minWidth: 210,
                   px: 2.5,
                   py: 1.6,
                   borderRadius: 3,
                   backgroundColor: "#00342B",
                   color: "#FFFFFF",
-                  alignSelf: { xs: "stretch", md: "auto" },
+                  alignSelf: "center",
                   opacity: projectQuestionLoading ? 0.65 : 1
                 }}
               >
@@ -873,65 +880,48 @@ export function ProjectDetailsPage() {
         </Stack>
       </Box>
 
-      <Paper
-        elevation={0}
-        sx={{
-          px: 2.8,
-          py: 2.2,
-          borderRadius: 4,
-          backgroundColor: "#FFFFFF",
-          boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-        }}
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={1}
+        justifyContent="space-between"
+        alignItems={{ xs: "flex-start", md: "center" }}
+        sx={{ px: 0.5 }}
       >
-        <Stack
-          direction={{ xs: "column", lg: "row" }}
-          spacing={1.6}
-          justifyContent="space-between"
-          alignItems={{ xs: "flex-start", lg: "center" }}
-        >
-          <Stack direction="row" spacing={1.2} alignItems="flex-start">
-            <Box
-              sx={{
-                width: 38,
-                height: 38,
-                borderRadius: 2.5,
-                display: "grid",
-                placeItems: "center",
-                backgroundColor: canManageProject ? "#E6F6FF" : "#FFF5EE",
-                color: canManageProject ? "#046B5E" : "#7A1E08"
-              }}
-            >
-              {canManageProject ? <EditRoundedIcon sx={{ fontSize: 18 }} /> : <ShieldRoundedIcon sx={{ fontSize: 18 }} />}
-            </Box>
-            <Box>
-              <Typography sx={{ fontSize: "0.92rem", fontWeight: 900, letterSpacing: 1.5, textTransform: "uppercase", color: "#93A6C3" }}>
-                Access Level
-              </Typography>
-              <Typography sx={{ mt: 0.5, fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>
-                {project.archivedAt
-                  ? "Archived workspace"
-                  : canManageProject
-                    ? user?.id === project.ownerId
-                      ? "Owner access"
-                      : "Admin override access"
-                    : "Read-only access"}
-              </Typography>
-              <Typography sx={{ mt: 0.55, fontSize: "0.92rem", lineHeight: 1.65, color: "#5A6A84" }}>
-                {project.archivedAt
-                  ? "Records stay visible for reporting, but edits, team changes, and document updates are locked."
-                  : canManageProject
-                    ? user?.id === project.ownerId
-                      ? "You can edit project details, manage the on-site team, update the document vault, and archive the project."
-                      : "As an admin, you can manage this project even though another workspace owner is assigned to it."
-                    : "You can review the project, related change orders, documents, and activity, but only the owner or an admin can make changes."}
-              </Typography>
-            </Box>
-          </Stack>
-          <Typography sx={{ fontSize: "0.88rem", color: "#7A869F" }}>
-            {user?.id === project.ownerId ? "Assigned owner: you" : `Owner record: ${project.ownerId}`}
+        <Stack direction="row" spacing={0.8} alignItems="center">
+          <Box
+            sx={{
+              width: 26,
+              height: 26,
+              borderRadius: 1.8,
+              display: "grid",
+              placeItems: "center",
+              backgroundColor: canManageProject ? "#E6F6FF" : "#FFF5EE",
+              color: canManageProject ? "#046B5E" : "#7A1E08"
+            }}
+          >
+            {canManageProject ? <EditRoundedIcon sx={{ fontSize: 14 }} /> : <ShieldRoundedIcon sx={{ fontSize: 14 }} />}
+          </Box>
+          <Typography sx={{ fontSize: "0.8rem", lineHeight: 1.5, color: "#7A869F" }}>
+            <Box component="span" sx={{ fontWeight: 900, color: "#5A6A84" }}>
+              {project.archivedAt
+                ? "Archived workspace"
+                : canManageProject
+                  ? user?.id === project.ownerId
+                    ? "Owner access"
+                    : "Admin override access"
+                  : "Read-only access"}
+            </Box>{" "}
+            {project.archivedAt
+              ? "Edits and document updates are locked."
+              : canManageProject
+                ? "You can manage project details, documents, and team changes."
+                : "Only the owner or admin can make changes."}
           </Typography>
         </Stack>
-      </Paper>
+        <Typography sx={{ fontSize: "0.78rem", color: "#93A6C3" }}>
+          {user?.id === project.ownerId ? "Assigned owner: you" : `Owner record: ${project.ownerId}`}
+        </Typography>
+      </Stack>
 
       <Box
         sx={{
@@ -989,6 +979,98 @@ export function ProjectDetailsPage() {
                   }}
                 />
               </Box>
+            </Box>
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 5,
+              backgroundColor: "#D5ECF8",
+              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              spacing={2}
+              sx={{ mb: 4 }}
+            >
+              <Box sx={{ width: "100%", textAlign: { xs: "left", md: "center" } }}>
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "2rem",
+                    fontWeight: 800,
+                    letterSpacing: -1.1,
+                    color: "#00342B"
+                  }}
+                >
+                  Recent Documents
+                </Typography>
+              </Box>
+              <ButtonBase
+                onClick={() => setDocumentVaultOpen(true)}
+                sx={{ color: "#046B5E", alignSelf: { xs: "flex-start", md: "center" } }}
+              >
+                <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View All</Typography>
+              </ButtonBase>
+            </Stack>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                gap: 2.5,
+                maxWidth: 980,
+                mx: "auto"
+              }}
+            >
+              {displayDocuments.map((document) => (
+                <Paper
+                  key={document.title}
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    display: "flex",
+                    gap: 2,
+                    alignItems: "center",
+                    borderRadius: 3.5,
+                    backgroundColor: "#FFFFFF"
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 2.5,
+                      display: "grid",
+                      placeItems: "center",
+                      backgroundColor: "#E6F6FF"
+                    }}
+                  >
+                    {document.icon}
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{document.title}</Typography>
+                    {document.aiSummary ? (
+                      <Typography sx={{ mt: 0.65, fontSize: "0.88rem", lineHeight: 1.55, color: "#42536D" }}>
+                        {document.aiSummary}
+                      </Typography>
+                    ) : null}
+                    <Typography sx={{ mt: 0.6, fontSize: "0.76rem", fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#93A6C3" }}>
+                      {document.subtitle}
+                    </Typography>
+                    {document.status ? (
+                      <Typography sx={{ mt: 0.45, fontSize: "0.72rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: document.status === "completed" ? "#046B5E" : document.status === "failed" ? "#872000" : "#5A6A84" }}>
+                        Agent {document.status}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                </Paper>
+              ))}
             </Box>
           </Paper>
 
@@ -1291,88 +1373,6 @@ export function ProjectDetailsPage() {
             >
               <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View Full Change History</Typography>
             </ButtonBase>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 4,
-              borderRadius: 5,
-              backgroundColor: "#D5ECF8",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-            }}
-          >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                  fontSize: "2rem",
-                  fontWeight: 800,
-                  letterSpacing: -1.1,
-                  color: "#00342B"
-                }}
-              >
-                Recent Documents
-              </Typography>
-              <ButtonBase
-                onClick={() => setDocumentVaultOpen(true)}
-                sx={{ color: "#046B5E" }}
-              >
-                <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View All</Typography>
-              </ButtonBase>
-            </Stack>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                gap: 2.5
-              }}
-            >
-              {displayDocuments.map((document) => (
-                <Paper
-                  key={document.title}
-                  elevation={0}
-                  sx={{
-                    p: 2.5,
-                    display: "flex",
-                    gap: 2,
-                    alignItems: "center",
-                    borderRadius: 3.5,
-                    backgroundColor: "#FFFFFF"
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 2.5,
-                      display: "grid",
-                      placeItems: "center",
-                      backgroundColor: "#E6F6FF"
-                    }}
-                  >
-                    {document.icon}
-                  </Box>
-                  <Box>
-                    <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{document.title}</Typography>
-                    {document.aiSummary ? (
-                      <Typography sx={{ mt: 0.65, fontSize: "0.88rem", lineHeight: 1.55, color: "#42536D" }}>
-                        {document.aiSummary}
-                      </Typography>
-                    ) : null}
-                    <Typography sx={{ mt: 0.6, fontSize: "0.76rem", fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#93A6C3" }}>
-                      {document.subtitle}
-                    </Typography>
-                    {document.status ? (
-                      <Typography sx={{ mt: 0.45, fontSize: "0.72rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: document.status === "completed" ? "#046B5E" : document.status === "failed" ? "#872000" : "#5A6A84" }}>
-                        Agent {document.status}
-                      </Typography>
-                    ) : null}
-                  </Box>
-                </Paper>
-              ))}
-            </Box>
           </Paper>
 
           <Paper

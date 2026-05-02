@@ -25,6 +25,20 @@ function normalizeAssignee(candidate: string | undefined, teamMembers: ProjectTe
   return match?.name ?? candidate.trim();
 }
 
+function isAgentHistoryStorageError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("P2021") ||
+    error.message.includes("does not exist") ||
+    error.message.includes("AgentRun") ||
+    error.message.includes("AgentStep") ||
+    error.message.includes("AgentMemoryEntry")
+  );
+}
+
 export const documentAgentService = {
   async processProjectDocument(input: {
     project: ProjectRecord;
@@ -39,13 +53,27 @@ export const documentAgentService = {
       contentType: document.contentType
     });
     const extractionMethod = extractionResult.method;
-    const agentRun = await agentRunRepository.create({
-      projectId: project.id,
-      documentId: document.id,
-      trigger: input.trigger ?? "document_upload",
-      status: "running",
-      model: env.ANTHROPIC_API_KEY ? env.ANTHROPIC_MODEL : "fallback"
-    });
+    let agentRun: { id: string } | null = null;
+
+    try {
+      agentRun = await agentRunRepository.create({
+        projectId: project.id,
+        documentId: document.id,
+        trigger: input.trigger ?? "document_upload",
+        status: "running",
+        model: env.ANTHROPIC_API_KEY ? env.ANTHROPIC_MODEL : "fallback"
+      });
+    } catch (error) {
+      if (!isAgentHistoryStorageError(error)) {
+        throw error;
+      }
+
+      logger.warn("Agent run history storage is unavailable. Continuing without Phase 3 persistence.", {
+        projectId: project.id,
+        documentId: document.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
 
     const run = await documentProcessingRunRepository.create({
       projectId: project.id,
@@ -57,22 +85,28 @@ export const documentAgentService = {
     });
 
     try {
-      await agentRunRepository.addStep({
-        runId: agentRun.id,
-        stepType: "extraction",
-        status: extractionResult.text ? "completed" : "fallback",
-        title: "Document text extraction",
-        details: extractionResult.text
-          ? `Extracted ${extractionResult.text.length.toLocaleString()} characters using ${extractionMethod}.`
-          : `No extractable text found. Proceeding with metadata fallback using ${extractionMethod}.`
-      });
+      if (agentRun) {
+        await agentRunRepository.addStep({
+          runId: agentRun.id,
+          stepType: "extraction",
+          status: extractionResult.text ? "completed" : "fallback",
+          title: "Document text extraction",
+          details: extractionResult.text
+            ? `Extracted ${extractionResult.text.length.toLocaleString()} characters using ${extractionMethod}.`
+            : `No extractable text found. Proceeding with metadata fallback using ${extractionMethod}.`
+        });
+      }
 
       const extractedText = extractionResult.text.slice(0, 15000) || undefined;
 
       await Promise.all([
         projectTaskRepository.deleteAgentTasksForDocument(project.id, document.id),
         projectRiskFlagRepository.deleteAgentRiskFlagsForDocument(project.id, document.id),
-        agentMemoryEntryRepository.deleteForDocument(project.id, document.id)
+        agentMemoryEntryRepository.deleteForDocument(project.id, document.id).catch((error: unknown) => {
+          if (!isAgentHistoryStorageError(error)) {
+            throw error;
+          }
+        })
       ]);
 
       const chunkPayload = extractedText
@@ -83,13 +117,15 @@ export const documentAgentService = {
               .join("\n\n")
         );
 
-      await agentRunRepository.addStep({
-        runId: agentRun.id,
-        stepType: "chunking",
-        status: "completed",
-        title: "Prepared document retrieval chunks",
-        details: `Stored ${chunkPayload.length} chunk${chunkPayload.length === 1 ? "" : "s"} for grounded retrieval.`
-      });
+      if (agentRun) {
+        await agentRunRepository.addStep({
+          runId: agentRun.id,
+          stepType: "chunking",
+          status: "completed",
+          title: "Prepared document retrieval chunks",
+          details: `Stored ${chunkPayload.length} chunk${chunkPayload.length === 1 ? "" : "s"} for grounded retrieval.`
+        });
+      }
 
       await documentChunkRepository.replaceForDocument(
         project.id,
@@ -113,30 +149,36 @@ export const documentAgentService = {
             }))
           );
 
-          await agentRunRepository.addStep({
-            runId: agentRun.id,
-            stepType: "embedding",
-            status: "completed",
-            title: "Generated semantic embeddings",
-            details: `Created Voyage embeddings for ${embeddings.length} chunk${embeddings.length === 1 ? "" : "s"} using ${env.VOYAGE_EMBEDDING_MODEL}.`
-          });
+          if (agentRun) {
+            await agentRunRepository.addStep({
+              runId: agentRun.id,
+              stepType: "embedding",
+              status: "completed",
+              title: "Generated semantic embeddings",
+              details: `Created Voyage embeddings for ${embeddings.length} chunk${embeddings.length === 1 ? "" : "s"} using ${env.VOYAGE_EMBEDDING_MODEL}.`
+            });
+          }
         } else {
+          if (agentRun) {
+            await agentRunRepository.addStep({
+              runId: agentRun.id,
+              stepType: "embedding",
+              status: "fallback",
+              title: "Embeddings skipped",
+              details: "Semantic embeddings were unavailable for one or more chunks, so lexical retrieval remains the fallback."
+            });
+          }
+        }
+      } else {
+        if (agentRun) {
           await agentRunRepository.addStep({
             runId: agentRun.id,
             stepType: "embedding",
             status: "fallback",
-            title: "Embeddings skipped",
-            details: "Semantic embeddings were unavailable for one or more chunks, so lexical retrieval remains the fallback."
+            title: "Embeddings not configured",
+            details: "Voyage embeddings are not configured or no chunks were available, so semantic retrieval was not refreshed."
           });
         }
-      } else {
-        await agentRunRepository.addStep({
-          runId: agentRun.id,
-          stepType: "embedding",
-          status: "fallback",
-          title: "Embeddings not configured",
-          details: "Voyage embeddings are not configured or no chunks were available, so semantic retrieval was not refreshed."
-        });
       }
 
       const changeOrders = await changeOrderRepository.list(project.id, { includeArchived: true });
@@ -148,13 +190,15 @@ export const documentAgentService = {
         extractedText
       });
 
-      await agentRunRepository.addStep({
-        runId: agentRun.id,
-        stepType: "analysis",
-        status: "completed",
-        title: "Analyzed document with agent reasoning",
-        details: `${analysis.source === "claude" ? "Claude" : "Fallback logic"} produced ${analysis.actionItems.length} action item${analysis.actionItems.length === 1 ? "" : "s"} and ${analysis.keyRisks.length} risk flag${analysis.keyRisks.length === 1 ? "" : "s"}.`
-      });
+      if (agentRun) {
+        await agentRunRepository.addStep({
+          runId: agentRun.id,
+          stepType: "analysis",
+          status: "completed",
+          title: "Analyzed document with agent reasoning",
+          details: `${analysis.source === "claude" ? "Claude" : "Fallback logic"} produced ${analysis.actionItems.length} action item${analysis.actionItems.length === 1 ? "" : "s"} and ${analysis.keyRisks.length} risk flag${analysis.keyRisks.length === 1 ? "" : "s"}.`
+        });
+      }
 
       const assignedTo = normalizeAssignee(analysis.suggestedAssignee ?? document.assignedTo, teamMembers);
 
@@ -198,59 +242,67 @@ export const documentAgentService = {
         )
       );
 
-      await agentRunRepository.addStep({
-        runId: agentRun.id,
-        stepType: "actions",
-        status: "completed",
-        title: "Created project follow-up items",
-        details: `Added ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} and ${createdRiskFlags.length} risk flag${createdRiskFlags.length === 1 ? "" : "s"} from the latest document analysis.`
-      });
+      if (agentRun) {
+        await agentRunRepository.addStep({
+          runId: agentRun.id,
+          stepType: "actions",
+          status: "completed",
+          title: "Created project follow-up items",
+          details: `Added ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} and ${createdRiskFlags.length} risk flag${createdRiskFlags.length === 1 ? "" : "s"} from the latest document analysis.`
+        });
 
-      await agentMemoryEntryRepository.createMany([
-        {
-          projectId: project.id,
-          documentId: document.id,
-          runId: agentRun.id,
-          kind: "document_summary",
-          title: document.title,
-          content: analysis.summary
-        },
-        ...analysis.actionItems.map((item) => ({
-          projectId: project.id,
-          documentId: document.id,
-          runId: agentRun.id,
-          kind: "action_item",
-          title: item.title,
-          content: `${item.description}${item.assignee ? ` Assigned to ${item.assignee}.` : ""}`
-        })),
-        ...analysis.keyRisks.map((item) => ({
-          projectId: project.id,
-          documentId: document.id,
-          runId: agentRun.id,
-          kind: "risk_flag",
-          title: item.title,
-          content: `[${item.level.toUpperCase()}] ${item.description}`
-        }))
-      ]);
+        await agentMemoryEntryRepository.createMany([
+          {
+            projectId: project.id,
+            documentId: document.id,
+            runId: agentRun.id,
+            kind: "document_summary",
+            title: document.title,
+            content: analysis.summary
+          },
+          ...analysis.actionItems.map((item) => ({
+            projectId: project.id,
+            documentId: document.id,
+            runId: agentRun.id,
+            kind: "action_item",
+            title: item.title,
+            content: `${item.description}${item.assignee ? ` Assigned to ${item.assignee}.` : ""}`
+          })),
+          ...analysis.keyRisks.map((item) => ({
+            projectId: project.id,
+            documentId: document.id,
+            runId: agentRun.id,
+            kind: "risk_flag",
+            title: item.title,
+            content: `[${item.level.toUpperCase()}] ${item.description}`
+          }))
+        ]).catch((error: unknown) => {
+          if (!isAgentHistoryStorageError(error)) {
+            throw error;
+          }
+        });
 
-      await agentRunRepository.addStep({
-        runId: agentRun.id,
-        stepType: "memory",
-        status: "completed",
-        title: "Stored project memory entries",
-        details: `Saved summary, action items, and risk context so future agent runs can reuse this document's outcomes.`
-      });
+        await agentRunRepository.addStep({
+          runId: agentRun.id,
+          stepType: "memory",
+          status: "completed",
+          title: "Stored project memory entries",
+          details: `Saved summary, action items, and risk context so future agent runs can reuse this document's outcomes.`
+        });
+      }
 
       await documentProcessingRunRepository.update(run.id, {
         status: "completed",
         extractedTextChars: extractedText?.length
       });
 
-      await agentRunRepository.update(agentRun.id, {
-        status: "completed",
-        summary: analysis.summary,
-        model: analysis.source === "claude" ? env.ANTHROPIC_MODEL : "fallback"
-      });
+      if (agentRun) {
+        await agentRunRepository.update(agentRun.id, {
+          status: "completed",
+          summary: analysis.summary,
+          model: analysis.source === "claude" ? env.ANTHROPIC_MODEL : "fallback"
+        });
+      }
 
       await auditLogService.record("project.document.agent_processed", "projectDocument", document.id, {
         projectId: project.id,
@@ -285,18 +337,20 @@ export const documentAgentService = {
         errorMessage: error instanceof Error ? error.message : "Agent processing failed."
       });
 
-      await agentRunRepository.addStep({
-        runId: agentRun.id,
-        stepType: "failure",
-        status: "failed",
-        title: "Agent run failed",
-        details: error instanceof Error ? error.message : "Agent processing failed."
-      });
+      if (agentRun) {
+        await agentRunRepository.addStep({
+          runId: agentRun.id,
+          stepType: "failure",
+          status: "failed",
+          title: "Agent run failed",
+          details: error instanceof Error ? error.message : "Agent processing failed."
+        });
 
-      await agentRunRepository.update(agentRun.id, {
-        status: "failed",
-        summary: error instanceof Error ? error.message : "Agent processing failed."
-      });
+        await agentRunRepository.update(agentRun.id, {
+          status: "failed",
+          summary: error instanceof Error ? error.message : "Agent processing failed."
+        });
+      }
 
       return document;
     }

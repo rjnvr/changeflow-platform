@@ -46,7 +46,7 @@ export const agentMemoryEntryRepository = {
       content: string;
     }>
   ) {
-    if (entries.length === 0) {
+    if (!agentMemoryEntryClient || entries.length === 0) {
       return;
     }
 
@@ -62,6 +62,10 @@ export const agentMemoryEntryRepository = {
     });
   },
   async deleteForDocument(projectId: string, documentId: string) {
+    if (!agentMemoryEntryClient) {
+      return;
+    }
+
     await agentMemoryEntryClient.deleteMany({
       where: {
         projectId,
@@ -70,6 +74,10 @@ export const agentMemoryEntryRepository = {
     });
   },
   async listByProject(projectId: string) {
+    if (!agentMemoryEntryClient) {
+      return [];
+    }
+
     const entries = await agentMemoryEntryClient.findMany({
       where: { projectId },
       orderBy: [{ createdAt: "desc" }]
