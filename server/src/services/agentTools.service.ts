@@ -6,7 +6,10 @@ import type { ProjectCommentRecord, ProjectDocumentRecord, ProjectRiskFlagRecord
 
 export const agentToolsService = {
   async createProjectTask(input: Omit<ProjectTaskRecord, "id" | "createdAt" | "updatedAt" | "projectName">) {
-    return projectTaskRepository.create(input);
+    return projectTaskRepository.create({
+      ...input,
+      relatedDocuments: input.relatedDocuments ?? []
+    });
   },
   async createRiskFlag(input: Omit<ProjectRiskFlagRecord, "id" | "createdAt" | "updatedAt" | "projectName">) {
     return projectRiskFlagRepository.create(input);

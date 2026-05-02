@@ -75,6 +75,14 @@ export interface ProjectDocumentUploadIntent {
   expiresIn: number;
 }
 
+export interface ProjectTaskRelatedDocument {
+  id: string;
+  title: string;
+  kind: string;
+  fileName?: string;
+  url?: string;
+}
+
 export interface ProjectAnalyticsUsage {
   userLimit: number;
   userUsed: number;
@@ -107,6 +115,7 @@ export interface ProjectTask {
   projectId: string;
   projectName?: string;
   sourceDocumentId?: string;
+  relatedDocuments: ProjectTaskRelatedDocument[];
   title: string;
   description: string;
   status: ProjectTaskStatus;
@@ -188,9 +197,17 @@ export interface AgentPendingAction {
   summary: string;
   inputJson?: string;
   approvedById?: string;
+  approvedByName?: string;
   approvedAt?: string;
   dismissedById?: string;
+  dismissedByName?: string;
   dismissedAt?: string;
+  evidenceDocumentId?: string;
+  evidenceDocumentTitle?: string;
+  evidenceExcerpt?: string;
+  rationale?: string;
+  currentStateSummary?: string;
+  proposedStateSummary?: string;
   createdAt: string;
   updatedAt: string;
 }

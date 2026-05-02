@@ -579,164 +579,60 @@ export function ProjectDetailsPage() {
               <ShieldRoundedIcon sx={{ fontSize: 34, color: "#046B5E" }} />
             </Box>
           </Paper>
+        </Stack>
+      </Box>
 
-          <Paper
-            elevation={0}
-            sx={{
-              p: 4,
-              borderRadius: 5,
-              backgroundColor: "#FFFFFF",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-            }}
-          >
-            <Stack
-              direction="column"
-              justifyContent="center"
-              alignItems="center"
-              spacing={1.6}
-              sx={{ mb: 3.4, textAlign: "center" }}
-            >
-              <Box sx={{ maxWidth: 860 }}>
-                <Typography
-                  sx={{
-                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: { xs: "2rem", md: "2.45rem" },
-                    fontWeight: 800,
-                    letterSpacing: -1.2,
-                    color: "#00342B"
-                  }}
-                >
-                  Ask This Project
-                </Typography>
-                <Typography sx={{ mt: 0.8, fontSize: "0.98rem", lineHeight: 1.65, color: "#5A6A84", maxWidth: 760, mx: "auto" }}>
-                  Ask a grounded question over uploaded project documents. The answer uses stored document chunks and cites the exact evidence it found.
-                </Typography>
-              </Box>
-              <ButtonBase
-                onClick={() => setAgentWorkspaceOpen(true)}
-                sx={{
-                  px: 2.4,
-                  py: 1.2,
-                  borderRadius: 2.5,
-                  backgroundColor: "#E6F6FF",
-                  color: "#00342B"
-                }}
-              >
-                <Typography sx={{ fontSize: "0.9rem", fontWeight: 800 }}>Open Agent Workspace</Typography>
-              </ButtonBase>
-            </Stack>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={1.2}
+        justifyContent="space-between"
+        alignItems={{ xs: "flex-start", md: "center" }}
+        sx={{ maxWidth: 1240, width: "100%", mx: "auto", px: 0.4 }}
+      >
+        <Typography sx={{ fontSize: "0.8rem", lineHeight: 1.5, color: "#7A869F" }}>
+          <Box component="span" sx={{ fontWeight: 700, color: "#42536D" }}>
+            {project.archivedAt
+              ? "Archived workspace"
+              : canManageProject
+                ? user?.id === project.ownerId
+                  ? "Owner access"
+                  : "Admin override access"
+                : "Read-only access"}
+          </Box>{" "}
+          {project.archivedAt
+            ? "Edits and document updates are locked."
+            : canManageProject
+              ? "You can manage project details, documents, and team changes."
+              : "Only the owner or admin can make changes."}
+        </Typography>
+        <Typography sx={{ fontSize: "0.74rem", color: "#93A6C3" }}>
+          {user?.id === project.ownerId ? "Assigned owner: you" : `Owner record: ${project.ownerId}`}
+        </Typography>
+      </Stack>
 
-            <Stack
-              direction="column"
-              spacing={1.6}
-              alignItems="center"
-              justifyContent="center"
-              sx={{ maxWidth: 860, mx: "auto" }}
-            >
-              <TextField
-                value={projectQuestion}
-                onChange={(event) => setProjectQuestion(event.target.value)}
-                placeholder="What changed in this project that could affect the current budget or schedule?"
-                multiline
-                minRows={3}
-                fullWidth
-                sx={{
-                  maxWidth: 860,
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 3,
-                    backgroundColor: "#F9FCFF"
-                  }
-                }}
-              />
-              <ButtonBase
-                onClick={() => void handleAskProjectQuestion()}
-                disabled={projectQuestionLoading}
-                sx={{
-                  minWidth: 210,
-                  px: 2.5,
-                  py: 1.6,
-                  borderRadius: 3,
-                  backgroundColor: "#00342B",
-                  color: "#FFFFFF",
-                  alignSelf: "center",
-                  opacity: projectQuestionLoading ? 0.65 : 1
-                }}
-              >
-                <Stack spacing={0.3} alignItems="center">
-                  <Typography sx={{ fontSize: "0.88rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                    {projectQuestionLoading ? "Thinking..." : "Ask Project"}
-                  </Typography>
-                  <Typography sx={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.74)" }}>
-                    Grounded answer
-                  </Typography>
-                </Stack>
-              </ButtonBase>
-            </Stack>
-
-            {projectQuestionError ? <Alert severity="warning" sx={{ mt: 2.5 }}>{projectQuestionError}</Alert> : null}
-
-            {projectQuestionAnswer ? (
-              <Paper
-                elevation={0}
-                sx={{
-                  mt: 3,
-                  p: 3,
-                  borderRadius: 4,
-                  backgroundColor: "#F9FCFF",
-                  border: "1px solid rgba(213,236,248,0.95)"
-                }}
-              >
-                <Typography sx={{ fontSize: "1rem", lineHeight: 1.75, color: "#00342B" }}>
-                  {projectQuestionAnswer.answer}
-                </Typography>
-                <Stack spacing={1.5} sx={{ mt: 2.5 }}>
-                  {projectQuestionAnswer.citations.map((citation) => (
-                    <Paper
-                      key={`${citation.documentId}-${citation.chunkIndex}`}
-                      elevation={0}
-                      sx={{
-                        p: 2,
-                        borderRadius: 3,
-                        backgroundColor: "#FFFFFF",
-                        border: "1px solid rgba(213,236,248,0.82)"
-                      }}
-                    >
-                      <Typography sx={{ fontSize: "0.82rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
-                        {citation.documentTitle} • chunk {citation.chunkIndex + 1}
-                      </Typography>
-                      <Typography sx={{ mt: 0.85, fontSize: "0.9rem", lineHeight: 1.65, color: "#42536D" }}>
-                        {citation.excerpt}
-                      </Typography>
-                    </Paper>
-                  ))}
-                </Stack>
-              </Paper>
-            ) : null}
-          </Paper>
-
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1fr) minmax(280px, 0.9fr)" },
-              gap: 3
-            }}
-          >
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+          gap: 3
+        }}
+      >
             <Paper
               elevation={0}
               sx={{
                 p: 4,
-                borderRadius: 5,
+                borderRadius: 4,
                 backgroundColor: "#FFFFFF",
-                boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
               }}
             >
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                 <Typography
                   sx={{
                     fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: "1.8rem",
-                    fontWeight: 800,
-                    letterSpacing: -1,
+                    fontSize: "1.55rem",
+                    fontWeight: 700,
+                    letterSpacing: -0.6,
                     color: "#00342B"
                   }}
                 >
@@ -761,14 +657,14 @@ export function ProjectDetailsPage() {
                       <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
                         {run.trigger.replace(/_/g, " ")} • {run.status}
                       </Typography>
-                      <Typography sx={{ mt: 0.35, fontSize: "0.9rem", fontWeight: 800, color: "#00342B" }}>
+                      <Typography sx={{ mt: 0.35, fontSize: "0.9rem", fontWeight: 700, color: "#00342B" }}>
                         {run.summary ?? "Recent agent run recorded."}
                       </Typography>
                     </Paper>
                   ))}
                   {latestMemoryEntries.map((entry: AgentMemoryEntry) => (
                     <Typography key={entry.id} sx={{ fontSize: "0.84rem", lineHeight: 1.55, color: "#5A6A84" }}>
-                      <Box component="span" sx={{ fontWeight: 800, color: "#046B5E" }}>
+                      <Box component="span" sx={{ fontWeight: 700, color: "#046B5E" }}>
                         {entry.kind.replace(/_/g, " ")}:
                       </Box>{" "}
                       {entry.title}
@@ -790,7 +686,7 @@ export function ProjectDetailsPage() {
                       <Stack spacing={0.8} sx={{ mt: 1 }}>
                         {latestPendingAgentActions.map((action: AgentPendingAction) => (
                           <Box key={action.id}>
-                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: "#00342B" }}>
+                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 700, color: "#00342B" }}>
                               {action.title}
                             </Typography>
                             <Typography sx={{ mt: 0.2, fontSize: "0.78rem", color: "#5A6A84" }}>
@@ -816,7 +712,7 @@ export function ProjectDetailsPage() {
                       <Stack spacing={0.8} sx={{ mt: 1 }}>
                         {latestToolExecutions.map((execution: AgentToolExecution) => (
                           <Box key={execution.id}>
-                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 800, color: "#00342B" }}>
+                            <Typography sx={{ fontSize: "0.84rem", fontWeight: 700, color: "#00342B" }}>
                               {execution.title}
                             </Typography>
                             <Typography sx={{ mt: 0.2, fontSize: "0.78rem", color: "#5A6A84" }}>
@@ -843,7 +739,7 @@ export function ProjectDetailsPage() {
                         border: "1px solid rgba(213,236,248,0.9)"
                       }}
                     >
-                      <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{task.title}</Typography>
+                      <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "#00342B" }}>{task.title}</Typography>
                       <Typography sx={{ mt: 0.8, fontSize: "0.94rem", lineHeight: 1.6, color: "#42536D" }}>
                         {task.description}
                       </Typography>
@@ -852,13 +748,13 @@ export function ProjectDetailsPage() {
                           {task.status}
                         </Typography>
                         {task.assignedTo ? (
-                          <Typography sx={{ fontSize: "0.82rem", color: "#046B5E", fontWeight: 700 }}>
+                          <Typography sx={{ fontSize: "0.82rem", color: "#046B5E", fontWeight: 600 }}>
                             Assigned to {task.assignedTo}
                           </Typography>
                         ) : null}
                       </Stack>
                       <ButtonBase onClick={() => navigate(`/app/tasks/${task.id}`)} sx={{ mt: 1.2, color: "#046B5E" }}>
-                        <Typography sx={{ fontSize: "0.8rem", fontWeight: 800 }}>Open Task</Typography>
+                        <Typography sx={{ fontSize: "0.8rem", fontWeight: 700 }}>Open Task</Typography>
                       </ButtonBase>
                     </Paper>
                   ))}
@@ -873,7 +769,7 @@ export function ProjectDetailsPage() {
                   onClick={() => setAgentWorkspaceOpen(true)}
                   sx={{ mt: 2.5, color: "#046B5E" }}
                 >
-                  <Typography sx={{ fontSize: "0.94rem", fontWeight: 800 }}>Open Agent Tasks</Typography>
+                  <Typography sx={{ fontSize: "0.94rem", fontWeight: 700 }}>Open Agent Tasks</Typography>
                 </ButtonBase>
               ) : null}
             </Paper>
@@ -882,18 +778,18 @@ export function ProjectDetailsPage() {
               elevation={0}
               sx={{
                 p: 4,
-                borderRadius: 5,
+                borderRadius: 4,
                 backgroundColor: "#FFFFFF",
-                boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
               }}
             >
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                 <Typography
                   sx={{
                     fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: "1.8rem",
-                    fontWeight: 800,
-                    letterSpacing: -1,
+                    fontSize: "1.55rem",
+                    fontWeight: 700,
+                    letterSpacing: -0.6,
                     color: "#00342B"
                   }}
                 >
@@ -916,7 +812,7 @@ export function ProjectDetailsPage() {
                       }}
                     >
                       <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-                        <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#7A1E08" }}>{riskFlag.title}</Typography>
+                        <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "#7A1E08" }}>{riskFlag.title}</Typography>
                         <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.4, textTransform: "uppercase", color: "#872000" }}>
                           {riskFlag.level}
                         </Typography>
@@ -925,7 +821,7 @@ export function ProjectDetailsPage() {
                         {riskFlag.description}
                       </Typography>
                       <ButtonBase onClick={() => navigate(`/app/risk-flags/${riskFlag.id}`)} sx={{ mt: 1.2, color: "#872000" }}>
-                        <Typography sx={{ fontSize: "0.8rem", fontWeight: 800 }}>Open Risk Flag</Typography>
+                        <Typography sx={{ fontSize: "0.8rem", fontWeight: 700 }}>Open Risk Flag</Typography>
                       </ButtonBase>
                     </Paper>
                   ))}
@@ -936,57 +832,12 @@ export function ProjectDetailsPage() {
                 </Typography>
               )}
             </Paper>
-          </Box>
-        </Stack>
       </Box>
-
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={1}
-        justifyContent="space-between"
-        alignItems={{ xs: "flex-start", md: "center" }}
-        sx={{ px: 0.5 }}
-      >
-        <Stack direction="row" spacing={0.8} alignItems="center">
-          <Box
-            sx={{
-              width: 26,
-              height: 26,
-              borderRadius: 1.8,
-              display: "grid",
-              placeItems: "center",
-              backgroundColor: canManageProject ? "#E6F6FF" : "#FFF5EE",
-              color: canManageProject ? "#046B5E" : "#7A1E08"
-            }}
-          >
-            {canManageProject ? <EditRoundedIcon sx={{ fontSize: 14 }} /> : <ShieldRoundedIcon sx={{ fontSize: 14 }} />}
-          </Box>
-          <Typography sx={{ fontSize: "0.8rem", lineHeight: 1.5, color: "#7A869F" }}>
-            <Box component="span" sx={{ fontWeight: 900, color: "#5A6A84" }}>
-              {project.archivedAt
-                ? "Archived workspace"
-                : canManageProject
-                  ? user?.id === project.ownerId
-                    ? "Owner access"
-                    : "Admin override access"
-                  : "Read-only access"}
-            </Box>{" "}
-            {project.archivedAt
-              ? "Edits and document updates are locked."
-              : canManageProject
-                ? "You can manage project details, documents, and team changes."
-                : "Only the owner or admin can make changes."}
-          </Typography>
-        </Stack>
-        <Typography sx={{ fontSize: "0.78rem", color: "#93A6C3" }}>
-          {user?.id === project.ownerId ? "Assigned owner: you" : `Owner record: ${project.ownerId}`}
-        </Typography>
-      </Stack>
 
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.3fr) minmax(320px, 0.9fr)" },
+          gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.65fr) minmax(280px, 0.65fr)" },
           gap: 4
         }}
       >
@@ -995,74 +846,18 @@ export function ProjectDetailsPage() {
             elevation={0}
             sx={{
               p: 4,
-              borderRadius: 5,
+              borderRadius: 4,
               backgroundColor: "#FFFFFF",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-            }}
-          >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                  fontSize: "1.8rem",
-                  fontWeight: 800,
-                  letterSpacing: -1,
-                  color: "#00342B"
-                }}
-              >
-                Agent Notes
-              </Typography>
-              <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
-            </Stack>
-
-            {projectComments.length > 0 ? (
-              <Stack spacing={1.8}>
-                {projectComments.slice(0, 3).map((comment: ProjectComment) => (
-                  <Paper
-                    key={comment.id}
-                    elevation={0}
-                    sx={{
-                      p: 2,
-                      borderRadius: 3,
-                      backgroundColor: "#F9FCFF",
-                      border: "1px solid rgba(213,236,248,0.9)"
-                    }}
-                  >
-                    <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
-                      {comment.authorName} {comment.createdByAgent ? "• agent" : ""}
-                    </Typography>
-                    <Typography sx={{ mt: 0.7, fontSize: "0.92rem", lineHeight: 1.65, color: "#42536D" }}>
-                      {comment.body}
-                    </Typography>
-                    <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#7A869F" }}>
-                      {formatDateTime(comment.updatedAt)}
-                    </Typography>
-                  </Paper>
-                ))}
-              </Stack>
-            ) : (
-              <Typography sx={{ fontSize: "0.95rem", lineHeight: 1.65, color: "#5A6A84" }}>
-                Agent notes will appear here when a processed document generates a project-facing summary or follow-up recommendation.
-              </Typography>
-            )}
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 4,
-              borderRadius: 5,
-              backgroundColor: "#FFFFFF",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
               <Typography
                 sx={{
                   fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                  fontSize: "2rem",
-                  fontWeight: 800,
-                  letterSpacing: -1.1,
+                  fontSize: "1.7rem",
+                  fontWeight: 700,
+                  letterSpacing: -0.75,
                   color: "#00342B"
                 }}
               >
@@ -1071,7 +866,7 @@ export function ProjectDetailsPage() {
               <MoreHorizRoundedIcon sx={{ color: "#D5ECF8" }} />
             </Stack>
 
-            <Typography sx={{ fontSize: "1.24rem", lineHeight: 1.7, color: "#42536D" }}>
+            <Typography sx={{ fontSize: "1.08rem", lineHeight: 1.75, color: "#42536D" }}>
               {project.name} is a premium construction program in {project.location}. Contract value stands
               at {` ${formatCurrency(project.contractValue)} `} with {changeOrders.length} tracked change
               order{changeOrders.length === 1 ? "" : "s"} and a current commercial impact of
@@ -1080,7 +875,7 @@ export function ProjectDetailsPage() {
 
             <Box sx={{ mt: 5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.6 }}>
-                <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>Budget Utilization</Typography>
+                <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "#00342B" }}>Budget Utilization</Typography>
                 <Typography sx={{ fontSize: "1rem", color: "#5A6A84" }}>
                   {utilization}% ({formatCurrency(project.contractValue * (utilization / 100))} of {formatCurrency(project.contractValue)})
                 </Typography>
@@ -1102,9 +897,9 @@ export function ProjectDetailsPage() {
             elevation={0}
             sx={{
               p: 4,
-              borderRadius: 5,
-              backgroundColor: "#D5ECF8",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              borderRadius: 4,
+              backgroundColor: "#FFFFFF",
+              boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
             }}
           >
             <Stack
@@ -1118,9 +913,9 @@ export function ProjectDetailsPage() {
                 <Typography
                   sx={{
                     fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                    fontSize: "2rem",
-                    fontWeight: 800,
-                    letterSpacing: -1.1,
+                    fontSize: "1.7rem",
+                    fontWeight: 700,
+                    letterSpacing: -0.75,
                     color: "#00342B"
                   }}
                 >
@@ -1131,7 +926,7 @@ export function ProjectDetailsPage() {
                 onClick={() => setDocumentVaultOpen(true)}
                 sx={{ color: "#046B5E", alignSelf: { xs: "flex-start", md: "center" } }}
               >
-                <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>View All</Typography>
+                <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>View All</Typography>
               </ButtonBase>
             </Stack>
 
@@ -1154,7 +949,8 @@ export function ProjectDetailsPage() {
                     gap: 2,
                     alignItems: "center",
                     borderRadius: 3.5,
-                    backgroundColor: "#FFFFFF"
+                    backgroundColor: "#F9FCFF",
+                    border: "1px solid rgba(213,236,248,0.82)"
                   }}
                 >
                   <Box
@@ -1170,7 +966,7 @@ export function ProjectDetailsPage() {
                     {document.icon}
                   </Box>
                   <Box>
-                    <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#00342B" }}>{document.title}</Typography>
+                    <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "#00342B" }}>{document.title}</Typography>
                     {document.aiSummary ? (
                       <Typography sx={{ mt: 0.65, fontSize: "0.88rem", lineHeight: 1.55, color: "#42536D" }}>
                         {document.aiSummary}
@@ -1190,200 +986,391 @@ export function ProjectDetailsPage() {
             </Box>
           </Paper>
 
-          <Paper
-            elevation={0}
+          <Box
             sx={{
-              p: 4,
-              borderRadius: 5,
-              background: "linear-gradient(180deg, rgba(230,246,255,0.85) 0%, #FFFFFF 100%)",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.2fr) minmax(0, 0.95fr)" },
+              gap: 3
             }}
           >
-            <Stack
-              direction={{ xs: "column", md: "row" }}
-              justifyContent="space-between"
-              alignItems={{ xs: "flex-start", md: "center" }}
-              spacing={2}
-              sx={{ mb: 3 }}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                borderRadius: 4,
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
+              }}
             >
-              <Box>
-                <Stack direction="row" spacing={1.2} alignItems="center">
-                  <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", md: "center" }}
+                spacing={1.5}
+                sx={{ mb: 2.2 }}
+              >
+                <Box sx={{ width: "100%" }}>
                   <Typography
                     sx={{
                       fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                      fontSize: "2rem",
-                      fontWeight: 800,
-                      letterSpacing: -1.1,
+                      fontSize: { xs: "1.45rem", md: "1.65rem" },
+                      fontWeight: 700,
+                      letterSpacing: -0.65,
                       color: "#00342B"
                     }}
                   >
-                    Project Analytics Brief
+                    Ask This Project
                   </Typography>
-                </Stack>
-                <Typography sx={{ mt: 1, fontSize: "1rem", color: "#5A6A84" }}>
-                  Generate a quick operational readout of what is happening now, what has progressed, and what needs attention.
-                </Typography>
-              </Box>
-              <ButtonBase
-                onClick={handleGenerateBrief}
-                disabled={briefLoading}
-                sx={{
-                  minWidth: 118,
-                  px: 1.8,
-                  py: 1.15,
-                  borderRadius: 2.5,
-                  backgroundColor: "#00342B",
-                  color: "#FFFFFF",
-                  opacity: briefLoading ? 0.72 : 1
-                }}
-              >
-                <Stack direction="row" spacing={0.9} alignItems="center">
-                  <AutoAwesomeRoundedIcon sx={{ fontSize: 17 }} />
-                  <Typography
-                    sx={{
-                      fontSize: "0.78rem",
-                      fontWeight: 800,
-                      lineHeight: 1.02,
-                      textAlign: "left"
-                    }}
-                  >
-                    <Box component="span" sx={{ display: "block" }}>
-                      {briefLoading ? "Generating" : projectBrief ? "Refresh" : "Generate"}
-                    </Box>
-                    <Box component="span" sx={{ display: "block" }}>
-                      Brief
-                    </Box>
+                  <Typography sx={{ mt: 0.6, fontSize: "0.9rem", lineHeight: 1.6, color: "#5A6A84" }}>
+                    Ask a grounded question over uploaded project documents and get a cited answer back.
                   </Typography>
-                </Stack>
-              </ButtonBase>
-            </Stack>
-
-            {briefError ? (
-              <Alert severity="warning" sx={{ mb: 3 }}>
-                {briefError}
-              </Alert>
-            ) : null}
-
-            {projectBrief ? (
-              <Stack spacing={3}>
-                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
-                  <Box
-                    sx={{
-                      px: 1.4,
-                      py: 0.7,
-                      borderRadius: 999,
-                      backgroundColor: projectBrief.source === "claude" ? "#9DEFDE" : "#CFE6F2",
-                      color: projectBrief.source === "claude" ? "#0F6F62" : "#3F4945"
-                    }}
-                  >
-                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.3, textTransform: "uppercase" }}>
-                      {projectBrief.source === "claude" ? "Claude Insight" : "Local Insight"}
-                    </Typography>
-                  </Box>
-                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
-                    Generated {formatDateTime(projectBrief.generatedAt)}
-                  </Typography>
-                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
-                    Your daily quota: {projectBrief.usage.userUsed}/{projectBrief.usage.userLimit}
-                  </Typography>
-                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
-                    Workspace pool: {projectBrief.usage.globalUsed}/{projectBrief.usage.globalLimit}
-                  </Typography>
-                </Stack>
-
-                <Typography sx={{ fontSize: "1.08rem", lineHeight: 1.7, color: "#42536D" }}>
-                  {projectBrief.summary}
-                </Typography>
-
-                <Box
+                </Box>
+                <ButtonBase
+                  onClick={() => setAgentWorkspaceOpen(true)}
                   sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                    gap: 2.2
+                    px: 2.1,
+                    py: 1.05,
+                    borderRadius: 2.5,
+                    backgroundColor: "#E6F6FF",
+                    color: "#00342B"
                   }}
                 >
-                  {[
-                    { title: "Current State", items: projectBrief.currentState, tone: "#E6F6FF" },
-                    { title: "Recent Progress", items: projectBrief.recentProgress, tone: "#FFFFFF" },
-                    { title: "Next Steps", items: projectBrief.nextSteps, tone: "#FFFFFF" },
-                    { title: "Watchouts", items: projectBrief.watchouts, tone: "#FFFAF8" }
-                  ].map((section) => (
-                    <Paper
-                      key={section.title}
-                      elevation={0}
-                      sx={{
-                        p: 2.4,
-                        borderRadius: 3.5,
-                        backgroundColor: section.tone,
-                        border: "1px solid rgba(213,236,248,0.8)"
-                      }}
-                    >
-                      <Typography
+                  <Typography sx={{ fontSize: "0.84rem", fontWeight: 700 }}>Open Agent Workspace</Typography>
+                </ButtonBase>
+              </Stack>
+
+              <Stack spacing={1.3} sx={{ width: "100%" }}>
+                <TextField
+                  value={projectQuestion}
+                  onChange={(event) => setProjectQuestion(event.target.value)}
+                  placeholder="What changed in this project that could affect the current budget or schedule?"
+                  multiline
+                  minRows={2}
+                  fullWidth
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                      backgroundColor: "#F9FCFF"
+                    }
+                  }}
+                />
+                <ButtonBase
+                  onClick={() => void handleAskProjectQuestion()}
+                  disabled={projectQuestionLoading}
+                  sx={{
+                    minWidth: 180,
+                    px: 2.2,
+                    py: 1.2,
+                    borderRadius: 3,
+                    backgroundColor: "#00342B",
+                    color: "#FFFFFF",
+                    alignSelf: "flex-start",
+                    opacity: projectQuestionLoading ? 0.65 : 1
+                  }}
+                >
+                  <Stack spacing={0.2} alignItems="flex-start">
+                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, letterSpacing: 1.1, textTransform: "uppercase" }}>
+                      {projectQuestionLoading ? "Thinking..." : "Ask Project"}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.74rem", color: "rgba(255,255,255,0.74)" }}>
+                      Grounded answer
+                    </Typography>
+                  </Stack>
+                </ButtonBase>
+              </Stack>
+
+              {projectQuestionError ? <Alert severity="warning" sx={{ mt: 2.2 }}>{projectQuestionError}</Alert> : null}
+
+              {projectQuestionAnswer ? (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    mt: 2.4,
+                    p: 2.4,
+                    borderRadius: 3.5,
+                    backgroundColor: "#F9FCFF",
+                    border: "1px solid rgba(213,236,248,0.95)"
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.72, color: "#00342B" }}>
+                    {projectQuestionAnswer.answer}
+                  </Typography>
+                  <Stack spacing={1.2} sx={{ mt: 2 }}>
+                    {projectQuestionAnswer.citations.map((citation) => (
+                      <Paper
+                        key={`${citation.documentId}-${citation.chunkIndex}`}
+                        elevation={0}
                         sx={{
-                          mb: 1.6,
-                          fontSize: "0.78rem",
-                          fontWeight: 900,
-                          letterSpacing: 1.7,
-                          textTransform: "uppercase",
-                          color: "#93A6C3"
+                          p: 1.8,
+                          borderRadius: 3,
+                          backgroundColor: "#FFFFFF",
+                          border: "1px solid rgba(213,236,248,0.82)"
                         }}
                       >
-                        {section.title}
-                      </Typography>
-                      <Stack spacing={1.1}>
-                        {section.items.map((item) => (
-                          <Stack key={item} direction="row" spacing={1.1} alignItems="flex-start">
-                            <Box
-                              sx={{
-                                width: 7,
-                                height: 7,
-                                mt: 0.9,
-                                borderRadius: "50%",
-                                backgroundColor: "#046B5E",
-                                flexShrink: 0
-                              }}
-                            />
-                            <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.6, color: "#42536D" }}>
-                              {item}
-                            </Typography>
-                          </Stack>
-                        ))}
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Box>
-              </Stack>
-            ) : (
+                        <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                          {citation.documentTitle} • chunk {citation.chunkIndex + 1}
+                        </Typography>
+                        <Typography sx={{ mt: 0.75, fontSize: "0.86rem", lineHeight: 1.6, color: "#42536D" }}>
+                          {citation.excerpt}
+                        </Typography>
+                      </Paper>
+                    ))}
+                  </Stack>
+                </Paper>
+              ) : null}
+            </Paper>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: 4,
+                borderRadius: 4,
+                background: "linear-gradient(180deg, rgba(230,246,255,0.85) 0%, #FFFFFF 100%)",
+                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
+              }}
+            >
               <Stack
+                direction={{ xs: "column", md: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", md: "center" }}
                 spacing={2}
-                sx={{
-                  px: { xs: 0, md: 1 },
-                  py: { xs: 1, md: 2 }
-                }}
+                sx={{ mb: 3 }}
               >
-                <Typography sx={{ fontSize: "1rem", lineHeight: 1.7, color: "#5A6A84", maxWidth: 760 }}>
-                  This uses the live project record, related change orders, on-site team, and document vault to generate a quick briefing a PM can act on immediately.
-                </Typography>
-                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
-                  {["Current state", "Recent progress", "Next steps", "Watchouts"].map((item) => (
-                    <Box
-                      key={item}
+                <Box>
+                  <Stack direction="row" spacing={1.2} alignItems="center">
+                    <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                    <Typography
                       sx={{
-                        px: 1.4,
-                        py: 0.8,
-                        borderRadius: 999,
-                        backgroundColor: "#FFFFFF",
-                        border: "1px solid rgba(213,236,248,0.95)"
+                        fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                        fontSize: "1.7rem",
+                        fontWeight: 700,
+                        letterSpacing: -0.75,
+                        color: "#00342B"
                       }}
                     >
-                      <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, color: "#42536D" }}>{item}</Typography>
+                      Project Analytics Brief
+                    </Typography>
+                  </Stack>
+                  <Typography sx={{ mt: 1, fontSize: "1rem", color: "#5A6A84" }}>
+                    Generate a quick operational readout of what is happening now, what has progressed, and what needs attention.
+                  </Typography>
+                </Box>
+                <ButtonBase
+                  onClick={handleGenerateBrief}
+                  disabled={briefLoading}
+                  sx={{
+                    minWidth: 118,
+                    px: 1.8,
+                    py: 1.15,
+                    borderRadius: 2.5,
+                    backgroundColor: "#00342B",
+                    color: "#FFFFFF",
+                    opacity: briefLoading ? 0.72 : 1
+                  }}
+                >
+                  <Stack direction="row" spacing={0.9} alignItems="center">
+                    <AutoAwesomeRoundedIcon sx={{ fontSize: 17 }} />
+                    <Typography
+                      sx={{
+                        fontSize: "0.78rem",
+                        fontWeight: 800,
+                        lineHeight: 1.02,
+                        textAlign: "left"
+                      }}
+                    >
+                      <Box component="span" sx={{ display: "block" }}>
+                        {briefLoading ? "Generating" : projectBrief ? "Refresh" : "Generate"}
+                      </Box>
+                      <Box component="span" sx={{ display: "block" }}>
+                        Brief
+                      </Box>
+                    </Typography>
+                  </Stack>
+                </ButtonBase>
+              </Stack>
+
+              {briefError ? (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                  {briefError}
+                </Alert>
+              ) : null}
+
+              {projectBrief ? (
+                <Stack spacing={3}>
+                  <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
+                    <Box
+                      sx={{
+                        px: 1.4,
+                        py: 0.7,
+                        borderRadius: 999,
+                        backgroundColor: projectBrief.source === "claude" ? "#9DEFDE" : "#CFE6F2",
+                        color: projectBrief.source === "claude" ? "#0F6F62" : "#3F4945"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.3, textTransform: "uppercase" }}>
+                        {projectBrief.source === "claude" ? "Claude Insight" : "Local Insight"}
+                      </Typography>
                     </Box>
+                    <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                      Generated {formatDateTime(projectBrief.generatedAt)}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                      Your daily quota: {projectBrief.usage.userUsed}/{projectBrief.usage.userLimit}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                      Workspace pool: {projectBrief.usage.globalUsed}/{projectBrief.usage.globalLimit}
+                    </Typography>
+                  </Stack>
+
+                  <Typography sx={{ fontSize: "1.08rem", lineHeight: 1.7, color: "#42536D" }}>
+                    {projectBrief.summary}
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                      gap: 2.2
+                    }}
+                  >
+                    {[
+                      { title: "Current State", items: projectBrief.currentState, tone: "#E6F6FF" },
+                      { title: "Recent Progress", items: projectBrief.recentProgress, tone: "#FFFFFF" },
+                      { title: "Next Steps", items: projectBrief.nextSteps, tone: "#FFFFFF" },
+                      { title: "Watchouts", items: projectBrief.watchouts, tone: "#FFFAF8" }
+                    ].map((section) => (
+                      <Paper
+                        key={section.title}
+                        elevation={0}
+                        sx={{
+                          p: 2.4,
+                          borderRadius: 3.5,
+                          backgroundColor: section.tone,
+                          border: "1px solid rgba(213,236,248,0.8)"
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            mb: 1.6,
+                            fontSize: "0.78rem",
+                            fontWeight: 900,
+                            letterSpacing: 1.7,
+                            textTransform: "uppercase",
+                            color: "#93A6C3"
+                          }}
+                        >
+                          {section.title}
+                        </Typography>
+                        <Stack spacing={1.1}>
+                          {section.items.map((item) => (
+                            <Stack key={item} direction="row" spacing={1.1} alignItems="flex-start">
+                              <Box
+                                sx={{
+                                  width: 7,
+                                  height: 7,
+                                  mt: 0.9,
+                                  borderRadius: "50%",
+                                  backgroundColor: "#046B5E",
+                                  flexShrink: 0
+                                }}
+                              />
+                              <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.6, color: "#42536D" }}>
+                                {item}
+                              </Typography>
+                            </Stack>
+                          ))}
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Box>
+                </Stack>
+              ) : (
+                <Stack
+                  spacing={2}
+                  sx={{
+                    px: { xs: 0, md: 1 },
+                    py: { xs: 1, md: 2 }
+                  }}
+                >
+                  <Typography sx={{ fontSize: "1rem", lineHeight: 1.7, color: "#5A6A84", maxWidth: 760 }}>
+                    This uses the live project record, related change orders, on-site team, and document vault to generate a quick briefing a PM can act on immediately.
+                  </Typography>
+                  <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
+                    {["Current state", "Recent progress", "Next steps", "Watchouts"].map((item) => (
+                      <Box
+                        key={item}
+                        sx={{
+                          px: 1.4,
+                          py: 0.8,
+                          borderRadius: 999,
+                          backgroundColor: "#FFFFFF",
+                          border: "1px solid rgba(213,236,248,0.95)"
+                        }}
+                      >
+                        <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, color: "#42536D" }}>{item}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Stack>
+              )}
+            </Paper>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: 4,
+                borderRadius: 4,
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                <Typography
+                  sx={{
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: "1.55rem",
+                    fontWeight: 700,
+                    letterSpacing: -0.6,
+                    color: "#00342B"
+                  }}
+                >
+                  Agent Notes
+                </Typography>
+                <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+              </Stack>
+
+              {projectComments.length > 0 ? (
+                <Stack spacing={1.8}>
+                  {projectComments.slice(0, 3).map((comment: ProjectComment) => (
+                    <Paper
+                      key={comment.id}
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        borderRadius: 3,
+                        backgroundColor: "#F9FCFF",
+                        border: "1px solid rgba(213,236,248,0.9)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {comment.authorName} {comment.createdByAgent ? "• agent" : ""}
+                      </Typography>
+                      <Typography sx={{ mt: 0.7, fontSize: "0.92rem", lineHeight: 1.65, color: "#42536D" }}>
+                        {comment.body}
+                      </Typography>
+                      <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#7A869F" }}>
+                        {formatDateTime(comment.updatedAt)}
+                      </Typography>
+                    </Paper>
                   ))}
                 </Stack>
-              </Stack>
-            )}
-          </Paper>
+              ) : (
+                <Typography sx={{ fontSize: "0.95rem", lineHeight: 1.65, color: "#5A6A84" }}>
+                  Agent notes will appear here when a processed document generates a project-facing summary or follow-up recommendation.
+                </Typography>
+              )}
+            </Paper>
+          </Box>
 
           <Paper
             elevation={0}
@@ -1613,20 +1600,20 @@ export function ProjectDetailsPage() {
           <Paper
             elevation={0}
             sx={{
-              p: 4,
-              borderRadius: 5,
+              p: 3,
+              borderRadius: 4,
               background: "linear-gradient(135deg, #00342B 0%, #004D40 100%)",
               color: "#FFFFFF",
-              boxShadow: "0 24px 48px rgba(7,30,39,0.12)"
+              boxShadow: "0 16px 32px rgba(7,30,39,0.1)"
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
               <Typography
                 sx={{
                   fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                  fontSize: "2rem",
-                  fontWeight: 800,
-                  letterSpacing: -1.1
+                  fontSize: "1.45rem",
+                  fontWeight: 700,
+                  letterSpacing: -0.55
                 }}
               >
                 Project Activity
@@ -1646,7 +1633,7 @@ export function ProjectDetailsPage() {
                 }}
               />
 
-              <Stack spacing={3.5}>
+              <Stack spacing={2.6}>
                 {[
                   {
                     icon: <CheckCircleRoundedIcon sx={{ color: "#FFFFFF", fontSize: 16 }} />,
@@ -1689,8 +1676,8 @@ export function ProjectDetailsPage() {
                       {item.icon}
                     </Box>
                     <Box>
-                      <Typography sx={{ fontSize: "1.02rem", fontWeight: 800, color: "#FFFFFF" }}>{item.title}</Typography>
-                      <Typography sx={{ mt: 0.5, fontSize: "0.88rem", color: "rgba(255,255,255,0.68)" }}>{item.body}</Typography>
+                      <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: "#FFFFFF" }}>{item.title}</Typography>
+                      <Typography sx={{ mt: 0.35, fontSize: "0.8rem", color: "rgba(255,255,255,0.68)" }}>{item.body}</Typography>
                     </Box>
                   </Stack>
                 ))}
@@ -1703,14 +1690,14 @@ export function ProjectDetailsPage() {
             sx={{
               p: 0,
               overflow: "hidden",
-              borderRadius: 5,
+              borderRadius: 4,
               backgroundColor: "#C7DDE9",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              boxShadow: "0 10px 24px rgba(7,30,39,0.04)"
             }}
           >
             <Box
               sx={{
-                height: 220,
+                height: 150,
                 background:
                   "linear-gradient(135deg, rgba(123,174,205,0.9) 0%, rgba(179,214,194,0.9) 100%)"
               }}
@@ -1724,10 +1711,10 @@ export function ProjectDetailsPage() {
                 );
               }}
               sx={{
-                m: 2.2,
-                px: 2.2,
-                py: 1.8,
-                borderRadius: 2.5,
+                m: 1.6,
+                px: 1.8,
+                py: 1.35,
+                borderRadius: 2.2,
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
@@ -1735,7 +1722,7 @@ export function ProjectDetailsPage() {
                 backdropFilter: "blur(12px)"
               }}
             >
-              <Typography sx={{ fontSize: "0.96rem", fontWeight: 800, color: "#00342B" }}>
+              <Typography sx={{ fontSize: "0.84rem", fontWeight: 700, color: "#00342B" }}>
                 Site Address: 1202 Georgia St.
               </Typography>
               <OpenInNewRoundedIcon sx={{ color: "#046B5E" }} />

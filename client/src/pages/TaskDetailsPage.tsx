@@ -15,6 +15,12 @@ import { WorkspaceFooter } from "../components/layout/WorkspaceFooter";
 import { useFeedbackContext } from "../context/FeedbackContext";
 import type { Project, ProjectDocument, ProjectTask } from "../types/project";
 import { formatDateTime } from "../utils/formatDate";
+import {
+  getTaskStatusMeta,
+  getTaskTransitionLabel,
+  getTaskTransitionMeta,
+  TASK_STATUS_ORDER
+} from "../utils/taskStatus";
 
 const nextStatusOptions: Record<ProjectTask["status"], Array<ProjectTask["status"]>> = {
   suggested: ["open"],
@@ -22,15 +28,6 @@ const nextStatusOptions: Record<ProjectTask["status"], Array<ProjectTask["status
   in_progress: ["done", "open"],
   done: ["open"]
 };
-
-function statusTone(status: ProjectTask["status"]) {
-  return {
-    suggested: { backgroundColor: "#EEF3F8", color: "#52637E", label: "Suggested" },
-    open: { backgroundColor: "#E6F6FF", color: "#046B5E", label: "Open" },
-    in_progress: { backgroundColor: "#D5ECF8", color: "#0C5A72", label: "In Progress" },
-    done: { backgroundColor: "#9DEFDE", color: "#0F6F62", label: "Done" }
-  }[status];
-}
 
 export function TaskDetailsPage() {
   const navigate = useNavigate();
@@ -74,10 +71,22 @@ export function TaskDetailsPage() {
     void load();
   }, [taskId]);
 
-  const linkedDocument = useMemo(
-    () => documents.find((document) => document.id === task?.sourceDocumentId),
-    [documents, task?.sourceDocumentId]
-  );
+  const linkedDocuments = useMemo(() => {
+    if (!task) {
+      return [];
+    }
+
+    if (task.relatedDocuments.length > 0) {
+      return task.relatedDocuments.map((relatedDocument) => ({
+        ...relatedDocument,
+        aiSummary: documents.find((document) => document.id === relatedDocument.id)?.aiSummary,
+        summary: documents.find((document) => document.id === relatedDocument.id)?.summary
+      }));
+    }
+
+    const sourceDocument = documents.find((document) => document.id === task.sourceDocumentId);
+    return sourceDocument ? [sourceDocument] : [];
+  }, [documents, task]);
 
   async function handleUpdateStatus(status: ProjectTask["status"]) {
     if (!task) {
@@ -103,7 +112,7 @@ export function TaskDetailsPage() {
     }
   }
 
-  const status = task ? statusTone(task.status) : null;
+  const status = task ? getTaskStatusMeta(task.status) : null;
 
   return (
     <Stack spacing={4.5}>
@@ -159,13 +168,55 @@ export function TaskDetailsPage() {
                 </Box>
 
                 {status ? (
-                  <Box sx={{ px: 1.6, py: 1, borderRadius: 2.5, backgroundColor: status.backgroundColor }}>
-                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: status.color }}>
+                  <Box sx={{ px: 1.7, py: 0.95, borderRadius: 1.2, backgroundColor: status.backgroundColor, display: "inline-flex", alignItems: "center" }}>
+                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: status.color, whiteSpace: "nowrap" }}>
                       {status.label}
                     </Typography>
                   </Box>
                 ) : null}
               </Stack>
+
+              {task ? (
+                <Stack spacing={1.2}>
+                  <Typography sx={{ fontSize: "0.82rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
+                    Workflow Progress
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" },
+                      gap: 1.2
+                    }}
+                  >
+                    {TASK_STATUS_ORDER.map((statusKey, index) => {
+                      const itemMeta = getTaskStatusMeta(statusKey);
+                      const currentIndex = TASK_STATUS_ORDER.indexOf(task.status);
+                      const isCurrent = statusKey === task.status;
+                      const isReached = index <= currentIndex;
+
+                      return (
+                        <Paper
+                          key={statusKey}
+                          elevation={0}
+                          sx={{
+                            p: 1.6,
+                            borderRadius: 3,
+                            backgroundColor: isCurrent ? itemMeta.backgroundColor : "#F9FCFF",
+                            border: `1px solid ${isReached ? "rgba(4,107,94,0.24)" : "rgba(213,236,248,0.9)"}`
+                          }}
+                        >
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: isCurrent ? itemMeta.color : "#93A6C3" }}>
+                            {itemMeta.boardLabel}
+                          </Typography>
+                          <Typography sx={{ mt: 0.45, fontSize: "0.8rem", lineHeight: 1.5, color: "#5A6A84" }}>
+                            {itemMeta.description}
+                          </Typography>
+                        </Paper>
+                      );
+                    })}
+                  </Box>
+                </Stack>
+              ) : null}
 
               <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
                 {nextStatusOptions[task.status]?.map((nextStatus) => (
@@ -177,20 +228,13 @@ export function TaskDetailsPage() {
                       px: 1.8,
                       py: 0.95,
                       borderRadius: 2.4,
-                      backgroundColor:
-                        nextStatus === "open" ? "#E6F6FF" : nextStatus === "in_progress" ? "#D5ECF8" : "#9DEFDE",
-                      color: nextStatus === "done" ? "#0F6F62" : "#00342B",
+                      backgroundColor: getTaskTransitionMeta(nextStatus).backgroundColor,
+                      color: getTaskTransitionMeta(nextStatus).color,
                       opacity: updatingStatus === nextStatus ? 0.65 : 1
                     }}
                   >
                     <Typography sx={{ fontSize: "0.8rem", fontWeight: 800 }}>
-                      {task.status === "suggested" && nextStatus === "open"
-                        ? "Add to Task Board"
-                        : nextStatus === "in_progress"
-                          ? "Start Task"
-                          : nextStatus === "done"
-                            ? "Complete Task"
-                            : "Reopen Task"}
+                      {getTaskTransitionLabel(task.status, nextStatus)}
                     </Typography>
                   </ButtonBase>
                 ))}
@@ -230,6 +274,9 @@ export function TaskDetailsPage() {
                 <Typography sx={{ fontSize: "1rem", color: "#00342B", fontWeight: 700 }}>
                   {task.assignedTo ?? "Unassigned"}
                 </Typography>
+                <Typography sx={{ fontSize: "0.9rem", color: "#5A6A84" }}>
+                  {status?.description}
+                </Typography>
               </Stack>
 
               <Stack spacing={1.2} sx={{ mt: 2.6 }}>
@@ -248,26 +295,33 @@ export function TaskDetailsPage() {
             <Paper elevation={0} sx={{ p: 3.2, borderRadius: 4, backgroundColor: "#F9FCFF", boxShadow: "0 12px 32px rgba(7,30,39,0.04)" }}>
               <Stack direction="row" spacing={1.2} alignItems="center">
                 <DescriptionRoundedIcon sx={{ color: "#046B5E" }} />
-                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Linked Evidence</Typography>
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Related Files</Typography>
               </Stack>
 
-              {linkedDocument ? (
-                <Paper elevation={0} sx={{ mt: 2.2, p: 2.2, borderRadius: 3, backgroundColor: "#FFFFFF", border: "1px solid rgba(213,236,248,0.9)" }}>
-                  <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{linkedDocument.title}</Typography>
-                  <Typography sx={{ mt: 0.7, fontSize: "0.9rem", lineHeight: 1.6, color: "#42536D" }}>
-                    {linkedDocument.aiSummary || linkedDocument.summary || "Document summary unavailable."}
-                  </Typography>
+              {linkedDocuments.length > 0 ? (
+                <Stack spacing={1.4} sx={{ mt: 2.2 }}>
+                  {linkedDocuments.map((linkedDocument) => (
+                    <Paper key={linkedDocument.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#FFFFFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                      <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{linkedDocument.title}</Typography>
+                      <Typography sx={{ mt: 0.45, fontSize: "0.76rem", fontWeight: 800, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {linkedDocument.kind}{linkedDocument.fileName ? ` • ${linkedDocument.fileName}` : ""}
+                      </Typography>
+                      <Typography sx={{ mt: 0.7, fontSize: "0.9rem", lineHeight: 1.6, color: "#42536D" }}>
+                        {linkedDocument.aiSummary || linkedDocument.summary || "Document summary unavailable."}
+                      </Typography>
+                    </Paper>
+                  ))}
                   <ButtonBase
                     onClick={() => navigate(`/app/projects/${project.id}`)}
-                    sx={{ mt: 1.2, color: "#046B5E", display: "inline-flex", alignItems: "center", gap: 0.6 }}
+                    sx={{ color: "#046B5E", display: "inline-flex", alignItems: "center", gap: 0.6, alignSelf: "flex-start" }}
                   >
                     <Typography sx={{ fontSize: "0.78rem", fontWeight: 800 }}>Open Project Document Vault</Typography>
                     <ArrowForwardRoundedIcon sx={{ fontSize: 18 }} />
                   </ButtonBase>
-                </Paper>
+                </Stack>
               ) : (
                 <Typography sx={{ mt: 2.2, fontSize: "0.95rem", color: "#5A6A84" }}>
-                  This task is not linked to a specific source document.
+                  This task does not have any related files linked yet.
                 </Typography>
               )}
             </Paper>

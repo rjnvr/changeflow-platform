@@ -85,11 +85,20 @@ export interface ProjectDocumentRecord {
   updatedAt: string;
 }
 
+export interface ProjectTaskRelatedDocumentRecord {
+  id: string;
+  title: string;
+  kind: string;
+  fileName?: string;
+  url?: string;
+}
+
 export interface ProjectTaskRecord {
   id: string;
   projectId: string;
   projectName?: string;
   sourceDocumentId?: string;
+  relatedDocuments: ProjectTaskRelatedDocumentRecord[];
   title: string;
   description: string;
   status: string;
@@ -171,9 +180,17 @@ export interface AgentPendingActionRecord {
   summary: string;
   inputJson?: string;
   approvedById?: string;
+  approvedByName?: string;
   approvedAt?: string;
   dismissedById?: string;
+  dismissedByName?: string;
   dismissedAt?: string;
+  evidenceDocumentId?: string;
+  evidenceDocumentTitle?: string;
+  evidenceExcerpt?: string;
+  rationale?: string;
+  currentStateSummary?: string;
+  proposedStateSummary?: string;
   createdAt: string;
   updatedAt: string;
 }

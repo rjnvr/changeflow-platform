@@ -158,7 +158,8 @@ export function LoginPage() {
               backgroundSize: "cover",
               backgroundPosition: "center",
               opacity: 0.36,
-              mixBlendMode: "luminosity"
+              mixBlendMode: "luminosity",
+              pointerEvents: "none"
             }}
           />
           <Box
@@ -166,7 +167,8 @@ export function LoginPage() {
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(48deg, rgba(0,52,43,0.96) 0%, rgba(0,52,43,0.82) 44%, rgba(0,52,43,0.26) 100%)"
+                "linear-gradient(48deg, rgba(0,52,43,0.96) 0%, rgba(0,52,43,0.82) 44%, rgba(0,52,43,0.26) 100%)",
+              pointerEvents: "none"
             }}
           />
           <Box
@@ -175,7 +177,8 @@ export function LoginPage() {
               inset: 0,
               backgroundImage:
                 "linear-gradient(to right, rgba(207,230,242,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(207,230,242,0.12) 1px, transparent 1px)",
-              backgroundSize: "40px 40px"
+              backgroundSize: "40px 40px",
+              pointerEvents: "none"
             }}
           />
 
@@ -304,11 +307,12 @@ export function LoginPage() {
               borderRadius: "50%",
               backgroundColor: "rgba(213,236,248,0.92)",
               filter: "blur(90px)",
-              transform: "translate(30%, -35%)"
+              transform: "translate(30%, -35%)",
+              pointerEvents: "none"
             }}
           />
 
-          <Box sx={{ width: "100%", maxWidth: 470, position: "relative", zIndex: 1 }}>
+          <Box sx={{ width: "100%", maxWidth: 470, position: "relative", zIndex: 2 }}>
             <Box sx={{ mb: 6 }}>
               <Typography
                 sx={{
@@ -378,6 +382,7 @@ export function LoginPage() {
                     id="email"
                     type="email"
                     fullWidth
+                    autoFocus
                     placeholder="name@company.com"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}

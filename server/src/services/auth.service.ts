@@ -65,6 +65,13 @@ export const authService = {
     const user = await userRepository.findByEmail(email);
 
     if (!user || !verifyPassword(password, user.passwordHash)) {
+      if (isDemoAccountEmail(email)) {
+        throw new ApiError(
+          401,
+          "Demo credentials are unavailable or out of sync locally. Run `npm run prisma:seed --workspace server` and use password123."
+        );
+      }
+
       throw new ApiError(401, "Invalid email or password.");
     }
 

@@ -50,6 +50,19 @@ function canEditProject(user: AuthenticatedUser, ownerId: string) {
   return user.role === "admin" || user.id === ownerId;
 }
 
+function safeParseJsonRecord(value: string | undefined) {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 const GLOBAL_PROJECT_BRIEF_MONTHLY_LIMIT = 150;
 
 function getMonthlyWindow(referenceDate = new Date()) {
@@ -317,6 +330,44 @@ export const projectService = {
       }
     }
 
+    const resolverIds = [
+      ...new Set(
+        pendingActions
+          .flatMap((action) => [action.approvedById, action.dismissedById])
+          .filter((value): value is string => Boolean(value))
+      )
+    ];
+    const resolverEntries = await Promise.all(
+      resolverIds.map(async (resolverId) => {
+        const user = await userRepository.findById(resolverId);
+        return user ? ([resolverId, `${user.firstName} ${user.lastName}`] as [string, string]) : null;
+      })
+    );
+    const resolverNameMap = new Map(
+      resolverEntries.filter((entry): entry is [string, string] => Boolean(entry))
+    );
+    const enrichedPendingActions = pendingActions.map((action) => {
+      const parsedInput = safeParseJsonRecord(action.inputJson);
+
+      return {
+        ...action,
+        approvedByName: action.approvedById ? resolverNameMap.get(action.approvedById) : undefined,
+        dismissedByName: action.dismissedById ? resolverNameMap.get(action.dismissedById) : undefined,
+        evidenceDocumentId:
+          typeof parsedInput.evidenceDocumentId === "string" ? parsedInput.evidenceDocumentId : action.documentId,
+        evidenceDocumentTitle:
+          typeof parsedInput.evidenceDocumentTitle === "string" ? parsedInput.evidenceDocumentTitle : undefined,
+        evidenceExcerpt:
+          typeof parsedInput.evidenceExcerpt === "string" ? parsedInput.evidenceExcerpt : undefined,
+        rationale:
+          typeof parsedInput.rationale === "string" ? parsedInput.rationale : undefined,
+        currentStateSummary:
+          typeof parsedInput.currentStateSummary === "string" ? parsedInput.currentStateSummary : undefined,
+        proposedStateSummary:
+          typeof parsedInput.proposedStateSummary === "string" ? parsedInput.proposedStateSummary : undefined
+      };
+    });
+
     return {
       tasks,
       riskFlags,
@@ -324,7 +375,7 @@ export const projectService = {
       processingRuns,
       agentRuns,
       toolExecutions,
-      pendingActions,
+      pendingActions: enrichedPendingActions,
       memoryEntries
     };
   },

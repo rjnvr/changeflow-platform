@@ -30,6 +30,7 @@ import type {
   ProjectTask
 } from "../../types/project";
 import { formatDateTime } from "../../utils/formatDate";
+import { getTaskStatusMeta, getTaskTransitionLabel, getTaskTransitionMeta } from "../../utils/taskStatus";
 
 interface AgentWorkspaceModalProps {
   open: boolean;
@@ -80,6 +81,9 @@ export function AgentWorkspaceModal({
   useEffect(() => {
     setLocalPendingActions(pendingActions);
   }, [pendingActions]);
+
+  const pendingReviewActions = localPendingActions.filter((action) => action.status === "pending");
+  const resolvedActions = localPendingActions.filter((action) => action.status !== "pending").slice(0, 6);
 
   async function handleTaskStatusUpdate(taskId: string, status: "suggested" | "open" | "in_progress" | "done") {
     setUpdatingItemId(taskId);
@@ -213,11 +217,8 @@ export function AgentWorkspaceModal({
                 <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
                 <Typography sx={{ fontSize: "1.2rem", fontWeight: 900, color: "#00342B" }}>Agent Review Queue</Typography>
               </Stack>
-              {localPendingActions.filter((action) => action.status === "pending").length > 0 ? (
-                localPendingActions
-                  .filter((action) => action.status === "pending")
-                  .slice(0, 8)
-                  .map((action) => (
+              {pendingReviewActions.length > 0 ? (
+                pendingReviewActions.slice(0, 8).map((action) => (
                     <Paper key={action.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#F9FCFF", border: "1px solid rgba(213,236,248,0.9)" }}>
                       <Typography sx={{ fontSize: "0.75rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
                         {action.actionType.replace(/_/g, " ")} • {action.status}
@@ -228,6 +229,48 @@ export function AgentWorkspaceModal({
                       <Typography sx={{ mt: 0.55, fontSize: "0.84rem", lineHeight: 1.6, color: "#42536D" }}>
                         {action.summary}
                       </Typography>
+                      {action.evidenceDocumentTitle ? (
+                        <Typography sx={{ mt: 0.6, fontSize: "0.78rem", fontWeight: 800, color: "#046B5E" }}>
+                          Source file: {action.evidenceDocumentTitle}
+                        </Typography>
+                      ) : null}
+                      {action.rationale ? (
+                        <Box sx={{ mt: 0.9 }}>
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Why the agent proposed this
+                          </Typography>
+                          <Typography sx={{ mt: 0.3, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                            {action.rationale}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                      {action.evidenceExcerpt ? (
+                        <Box sx={{ mt: 0.9 }}>
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Source evidence
+                          </Typography>
+                          <Typography sx={{ mt: 0.3, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                            {action.evidenceExcerpt}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                      {action.currentStateSummary || action.proposedStateSummary ? (
+                        <Box sx={{ mt: 0.9 }}>
+                          <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                            Current vs Proposed
+                          </Typography>
+                          {action.currentStateSummary ? (
+                            <Typography sx={{ mt: 0.3, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                              Current: {action.currentStateSummary}
+                            </Typography>
+                          ) : null}
+                          {action.proposedStateSummary ? (
+                            <Typography sx={{ mt: 0.2, fontSize: "0.76rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                              Proposed: {action.proposedStateSummary}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      ) : null}
                       {action.inputJson ? (
                         <Box sx={{ mt: 0.9 }}>
                           <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
@@ -266,6 +309,37 @@ export function AgentWorkspaceModal({
               ) : (
                 <Typography sx={{ fontSize: "0.94rem", color: "#5A6A84" }}>No pending agent review items right now.</Typography>
               )}
+              {resolvedActions.length > 0 ? (
+                <Box sx={{ pt: 1 }}>
+                  <Typography sx={{ fontSize: "0.82rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3", mb: 1.2 }}>
+                    Recently Resolved
+                  </Typography>
+                  <Stack spacing={1.2}>
+                    {resolvedActions.map((action) => (
+                      <Paper key={action.id} elevation={0} sx={{ p: 1.8, borderRadius: 3, backgroundColor: "#FFFFFF", border: "1px solid rgba(213,236,248,0.9)" }}>
+                        <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                          {action.actionType.replace(/_/g, " ")} • {action.status}
+                        </Typography>
+                        <Typography sx={{ mt: 0.3, fontSize: "0.88rem", fontWeight: 800, color: "#00342B" }}>
+                          {action.title}
+                        </Typography>
+                        <Typography sx={{ mt: 0.35, fontSize: "0.76rem", color: "#5A6A84" }}>
+                          {action.status === "approved"
+                            ? `Approved by ${action.approvedByName ?? action.approvedById ?? "reviewer"}`
+                            : `Dismissed by ${action.dismissedByName ?? action.dismissedById ?? "reviewer"}`}
+                          {" • "}
+                          {formatDateTime(action.approvedAt ?? action.dismissedAt ?? action.updatedAt)}
+                        </Typography>
+                        {action.evidenceDocumentTitle ? (
+                          <Typography sx={{ mt: 0.35, fontSize: "0.76rem", color: "#046B5E" }}>
+                            Source file: {action.evidenceDocumentTitle}
+                          </Typography>
+                        ) : null}
+                      </Paper>
+                    ))}
+                  </Stack>
+                </Box>
+              ) : null}
             </Stack>
 
             <Stack spacing={2}>
@@ -278,17 +352,49 @@ export function AgentWorkspaceModal({
                   <Paper key={task.id} elevation={0} sx={{ p: 2.2, borderRadius: 3, backgroundColor: "#F9FCFF", border: "1px solid rgba(213,236,248,0.9)" }}>
                     <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{task.title}</Typography>
                     <Typography sx={{ mt: 0.8, fontSize: "0.9rem", lineHeight: 1.6, color: "#42536D" }}>{task.description}</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                      <Box
+                        sx={{
+                          px: 1.25,
+                          py: 0.45,
+                          borderRadius: 1.2,
+                          backgroundColor: getTaskStatusMeta(task.status).backgroundColor,
+                          display: "inline-flex",
+                          alignItems: "center"
+                        }}
+                      >
+                        <Typography sx={{ fontSize: "0.68rem", fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: getTaskStatusMeta(task.status).color, whiteSpace: "nowrap" }}>
+                          {getTaskStatusMeta(task.status).label}
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: "0.76rem", color: "#7A869F" }}>
+                        {getTaskStatusMeta(task.status).description}
+                      </Typography>
+                    </Stack>
                     <Typography sx={{ mt: 1, fontSize: "0.74rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
-                      {task.status}{task.assignedTo ? ` • ${task.assignedTo}` : ""}
+                      {task.assignedTo ? `Assigned to ${task.assignedTo}` : "Unassigned"}
+                    </Typography>
+                    <Typography sx={{ mt: 0.4, fontSize: "0.8rem", color: "#5A6A84" }}>
+                      {task.relatedDocuments.length > 0
+                        ? `${task.relatedDocuments.length} related file${task.relatedDocuments.length === 1 ? "" : "s"} linked`
+                        : "No related files linked yet"}
                     </Typography>
                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1.3 }}>
                       {task.status === "suggested" ? (
                         <ButtonBase
                           disabled={updatingItemId === task.id}
                           onClick={() => void handleTaskStatusUpdate(task.id, "open")}
-                          sx={{ px: 1.4, py: 0.85, borderRadius: 2.2, backgroundColor: "#E6F6FF", color: "#00342B" }}
+                          sx={{
+                            px: 1.4,
+                            py: 0.85,
+                            borderRadius: 2.2,
+                            backgroundColor: getTaskTransitionMeta("open").backgroundColor,
+                            color: getTaskTransitionMeta("open").color
+                          }}
                         >
-                          <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>Add to Task Board</Typography>
+                          <Typography sx={{ fontSize: "0.74rem", fontWeight: 800 }}>
+                            {getTaskTransitionLabel(task.status, "open")}
+                          </Typography>
                         </ButtonBase>
                       ) : null}
                       <ButtonBase

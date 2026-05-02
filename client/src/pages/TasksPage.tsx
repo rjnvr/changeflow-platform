@@ -12,12 +12,13 @@ import { WorkspaceBreadcrumbs } from "../components/layout/WorkspaceBreadcrumbs"
 import { WorkspaceFooter } from "../components/layout/WorkspaceFooter";
 import { useFeedbackContext } from "../context/FeedbackContext";
 import type { ProjectTask } from "../types/project";
+import { getTaskStatusMeta, getTaskTransitionLabel, getTaskTransitionMeta } from "../utils/taskStatus";
 
 const columns: Array<{ key: ProjectTask["status"]; label: string }> = [
-  { key: "suggested", label: "Suggested" },
-  { key: "open", label: "Open" },
+  { key: "suggested", label: "Needs Review" },
+  { key: "open", label: "Ready to Start" },
   { key: "in_progress", label: "In Progress" },
-  { key: "done", label: "Done" }
+  { key: "done", label: "Completed" }
 ];
 
 const nextStatusOptions: Record<ProjectTask["status"], Array<ProjectTask["status"]>> = {
@@ -95,7 +96,7 @@ export function TasksPage() {
           Task Board
         </Typography>
         <Typography sx={{ mt: 1.4, maxWidth: 760, fontSize: "1.1rem", lineHeight: 1.7, color: "#5A6A84" }}>
-          Promote agent suggestions into active work, track progress across the team, and close tasks once the project follow-up is complete.
+          Move work from review into active execution, see what is ready to start, and close tasks once the project follow-up is complete.
         </Typography>
       </Box>
 
@@ -112,90 +113,120 @@ export function TasksPage() {
           gap: 2.5
         }}
       >
-        {columns.map((column) => (
-          <Paper
-            key={column.key}
-            elevation={0}
-            sx={{
-              p: 2.2,
-              borderRadius: 4,
-              backgroundColor: "#F9FCFF",
-              boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-              <AutoAwesomeRoundedIcon sx={{ color: column.key === "suggested" ? "#7A869F" : "#046B5E" }} />
-              <Typography sx={{ fontSize: "1rem", fontWeight: 900, color: "#00342B" }}>{column.label}</Typography>
-              <Typography sx={{ ml: "auto", fontSize: "0.78rem", fontWeight: 900, color: "#93A6C3" }}>
-                {groupedTasks.get(column.key)?.length ?? 0}
-              </Typography>
-            </Stack>
+        {columns.map((column) => {
+          const statusMeta = getTaskStatusMeta(column.key);
+          const columnTasks = groupedTasks.get(column.key) ?? [];
 
-            <Stack spacing={1.8}>
-              {(groupedTasks.get(column.key) ?? []).map((task) => (
-                <Paper
-                  key={task.id}
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    borderRadius: 3,
-                    backgroundColor: "#FFFFFF",
-                    border: "1px solid rgba(213,236,248,0.9)"
-                  }}
-                >
-                  <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{task.title}</Typography>
-                  <Typography sx={{ mt: 0.7, fontSize: "0.9rem", lineHeight: 1.6, color: "#42536D" }}>{task.description}</Typography>
-                  <Typography sx={{ mt: 1, fontSize: "0.74rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
-                    {task.projectName ?? "Project"}{task.assignedTo ? ` • ${task.assignedTo}` : ""}
-                  </Typography>
-                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1.5 }}>
-                    {nextStatusOptions[task.status as ProjectTask["status"]]?.map((nextStatus) => (
-                      <ButtonBase
-                        key={nextStatus}
+          return (
+            <Paper
+              key={column.key}
+              elevation={0}
+              sx={{
+                p: 2.2,
+                borderRadius: 4,
+                backgroundColor: "#F9FCFF",
+                boxShadow: "0 12px 32px rgba(7,30,39,0.04)"
+              }}
+            >
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                <AutoAwesomeRoundedIcon sx={{ color: statusMeta.accentColor }} />
+                <Typography sx={{ fontSize: "1rem", fontWeight: 900, color: "#00342B" }}>{column.label}</Typography>
+                <Typography sx={{ ml: "auto", fontSize: "0.78rem", fontWeight: 900, color: "#93A6C3" }}>
+                  {columnTasks.length}
+                </Typography>
+              </Stack>
+              <Typography sx={{ mb: 2, fontSize: "0.84rem", lineHeight: 1.55, color: "#5A6A84" }}>
+                {statusMeta.description}
+              </Typography>
+
+              <Stack spacing={1.8}>
+                {columnTasks.map((task) => {
+                  const taskStatusMeta = getTaskStatusMeta(task.status);
+
+                  return (
+                    <Paper
+                      key={task.id}
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        borderRadius: 3,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.9)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.98rem", fontWeight: 800, color: "#00342B" }}>{task.title}</Typography>
+                      <Typography sx={{ mt: 0.7, fontSize: "0.9rem", lineHeight: 1.6, color: "#42536D" }}>{task.description}</Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.1 }}>
+                    <Box
+                      sx={{
+                        px: 1.25,
+                        py: 0.45,
+                        borderRadius: 1.2,
+                        backgroundColor: taskStatusMeta.backgroundColor,
+                        display: "inline-flex",
+                        alignItems: "center"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.68rem", fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: taskStatusMeta.color, whiteSpace: "nowrap" }}>
+                        {taskStatusMeta.label}
+                      </Typography>
+                    </Box>
+                        <Typography sx={{ fontSize: "0.76rem", color: "#7A869F" }}>
+                          {taskStatusMeta.description}
+                        </Typography>
+                      </Stack>
+                      <Typography sx={{ mt: 1, fontSize: "0.74rem", fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {task.projectName ?? "Project"}{task.assignedTo ? ` • ${task.assignedTo}` : ""}
+                      </Typography>
+                      <Typography sx={{ mt: 0.45, fontSize: "0.8rem", color: "#5A6A84" }}>
+                        {task.relatedDocuments.length > 0
+                          ? `${task.relatedDocuments.length} related file${task.relatedDocuments.length === 1 ? "" : "s"} attached`
+                          : "No related files linked yet"}
+                      </Typography>
+                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1.5 }}>
+                        {nextStatusOptions[task.status as ProjectTask["status"]]?.map((nextStatus) => (
+                          <ButtonBase
+                            key={nextStatus}
                         disabled={updatingTaskId === task.id}
                         onClick={() => void handleUpdateStatus(task.id, nextStatus)}
                         sx={{
                           px: 1.6,
                           py: 0.85,
                           borderRadius: 2.2,
-                          backgroundColor: nextStatus === "open" ? "#E6F6FF" : nextStatus === "in_progress" ? "#D5ECF8" : "#9DEFDE",
-                          color: nextStatus === "done" ? "#0F6F62" : "#00342B",
+                          backgroundColor: getTaskTransitionMeta(nextStatus).backgroundColor,
+                          color: getTaskTransitionMeta(nextStatus).color,
                           opacity: updatingTaskId === task.id ? 0.65 : 1
                         }}
                       >
-                        <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>
-                          {task.status === "suggested" && nextStatus === "open"
-                            ? "Add to Board"
-                            : nextStatus === "in_progress"
-                              ? "Start"
-                              : nextStatus === "done"
-                                ? "Complete"
-                                : "Reopen"}
-                        </Typography>
-                      </ButtonBase>
-                    ))}
-                    <ButtonBase
-                      onClick={() => navigate(`/app/tasks/${task.id}`)}
-                      sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
-                    >
-                      <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>Details</Typography>
-                    </ButtonBase>
-                    <ButtonBase
-                      onClick={() => navigate(`/app/projects/${task.projectId}`)}
-                      sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
-                    >
-                      <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>Open Project</Typography>
-                    </ButtonBase>
-                  </Stack>
-                </Paper>
-              ))}
+                            <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>
+                              {getTaskTransitionLabel(task.status, nextStatus)}
+                            </Typography>
+                          </ButtonBase>
+                        ))}
+                        <ButtonBase
+                          onClick={() => navigate(`/app/tasks/${task.id}`)}
+                          sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
+                        >
+                          <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>Details</Typography>
+                        </ButtonBase>
+                        <ButtonBase
+                          onClick={() => navigate(`/app/projects/${task.projectId}`)}
+                          sx={{ px: 1.2, py: 0.85, borderRadius: 2.2, color: "#046B5E" }}
+                        >
+                          <Typography sx={{ fontSize: "0.76rem", fontWeight: 800 }}>Open Project</Typography>
+                        </ButtonBase>
+                      </Stack>
+                    </Paper>
+                  );
+                })}
 
-              {(groupedTasks.get(column.key) ?? []).length === 0 ? (
-                <Typography sx={{ fontSize: "0.88rem", color: "#7A869F" }}>No tasks in this column.</Typography>
-              ) : null}
-            </Stack>
-          </Paper>
-        ))}
+                {columnTasks.length === 0 ? (
+                  <Typography sx={{ fontSize: "0.88rem", color: "#7A869F" }}>No tasks in this column.</Typography>
+                ) : null}
+              </Stack>
+            </Paper>
+          );
+        })}
       </Box>
 
       <WorkspaceFooter />

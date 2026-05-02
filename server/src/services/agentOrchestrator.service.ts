@@ -24,6 +24,11 @@ function serializeJson(value: unknown) {
   }
 }
 
+function buildEvidenceExcerpt(extractedText: string | undefined, fallbackSummary: string) {
+  const excerpt = extractedText?.trim() ? extractedText.trim().slice(0, 360) : fallbackSummary.trim().slice(0, 360);
+  return excerpt.replace(/\s+/g, " ").trim();
+}
+
 export const agentOrchestratorService = {
   async runDocumentFlow(input: {
     project: ProjectRecord;
@@ -113,6 +118,14 @@ export const agentOrchestratorService = {
         summary: `The agent recommends assigning ${input.document.title} to ${assignedTo}.`,
         inputJson: serializeJson({
           documentId: input.document.id,
+          evidenceDocumentId: input.document.id,
+          evidenceDocumentTitle: input.document.title,
+          evidenceExcerpt: buildEvidenceExcerpt(input.extractedText, input.document.summary),
+          rationale: `The action plan selected ${assignedTo} based on the document classification, extracted content, and current team roster.`,
+          currentStateSummary: input.document.assignedTo
+            ? `Currently assigned to ${input.document.assignedTo}.`
+            : "Currently unassigned.",
+          proposedStateSummary: `Assign this document to ${assignedTo}.`,
           assignedTo,
           previousAssignedTo: input.document.assignedTo
         })
@@ -131,6 +144,15 @@ export const agentOrchestratorService = {
       const task = await agentToolsService.createProjectTask({
           projectId: input.project.id,
           sourceDocumentId: input.document.id,
+          relatedDocuments: [
+            {
+              id: input.document.id,
+              title: input.document.title,
+              kind: input.document.kind,
+              fileName: input.document.fileName,
+              url: input.document.url
+            }
+          ],
           title: item.title,
           description: item.description,
           status: "suggested",
@@ -215,6 +237,12 @@ export const agentOrchestratorService = {
         inputJson: serializeJson({
           projectId: input.project.id,
           sourceDocumentId: input.document.id,
+          evidenceDocumentId: input.document.id,
+          evidenceDocumentTitle: input.document.title,
+          evidenceExcerpt: buildEvidenceExcerpt(input.extractedText, input.document.summary),
+          rationale: "The agent synthesized the document classification, extracted evidence, and project context into a PM-facing note.",
+          currentStateSummary: "No new agent note has been posted for this document yet.",
+          proposedStateSummary: "Post a new project note summarizing the document and immediate follow-up.",
           authorName: "ChangeFlow Agent",
           body: actionPlan.projectComment,
           createdByAgent: true
@@ -241,6 +269,12 @@ export const agentOrchestratorService = {
           inputJson: serializeJson({
             projectId: input.project.id,
             sourceDocumentId: input.document.id,
+            evidenceDocumentId: input.document.id,
+            evidenceDocumentTitle: input.document.title,
+            evidenceExcerpt: buildEvidenceExcerpt(input.extractedText, input.document.summary),
+            rationale: "The agent detected scope, cost, or coordination signals that may require explicit commercial follow-up.",
+            currentStateSummary: "No change-order follow-up note has been posted from this document yet.",
+            proposedStateSummary: "Post a note prompting the team to validate change-order follow-up.",
             authorName: "ChangeFlow Agent",
             message: actionPlan.changeOrderFollowUp
           })

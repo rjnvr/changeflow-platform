@@ -6,6 +6,13 @@ type ProjectTaskRow = {
   projectId: string;
   project: { name: string } | null;
   sourceDocumentId: string | null;
+  sourceDocument: {
+    id: string;
+    title: string;
+    kind: string;
+    fileName: string | null;
+    url: string | null;
+  } | null;
   title: string;
   description: string;
   status: string;
@@ -31,6 +38,17 @@ function mapProjectTask(task: ProjectTaskRow): ProjectTaskRecord {
     projectId: task.projectId,
     projectName: task.project?.name ?? undefined,
     sourceDocumentId: task.sourceDocumentId ?? undefined,
+    relatedDocuments: task.sourceDocument
+      ? [
+          {
+            id: task.sourceDocument.id,
+            title: task.sourceDocument.title,
+            kind: task.sourceDocument.kind,
+            fileName: task.sourceDocument.fileName ?? undefined,
+            url: task.sourceDocument.url ?? undefined
+          }
+        ]
+      : [],
     title: task.title,
     description: task.description,
     status: task.status,
@@ -45,6 +63,15 @@ const includeProject = {
   project: {
     select: {
       name: true
+    }
+  },
+  sourceDocument: {
+    select: {
+      id: true,
+      title: true,
+      kind: true,
+      fileName: true,
+      url: true
     }
   }
 } as const;

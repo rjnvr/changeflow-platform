@@ -5,7 +5,7 @@ import { ApiError } from "../utils/apiError.js";
 
 export function errorMiddleware(
   error: unknown,
-  _request: Request,
+  request: Request,
   response: Response,
   _next: NextFunction
 ) {
@@ -27,9 +27,14 @@ export function errorMiddleware(
     return;
   }
 
+  console.error("Unhandled API error", {
+    method: request.method,
+    path: request.path,
+    error
+  });
+
   response.status(500).json({
     success: false,
     message: "Unexpected server error."
   });
 }
-

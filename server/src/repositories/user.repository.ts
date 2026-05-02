@@ -42,8 +42,25 @@ function normalizePersonLookup(value: string) {
 }
 
 let cachedProjectBriefLimitColumn: "dailyProjectBriefLimit" | "monthlyProjectBriefLimit" | null | undefined;
+let cachedResetPasswordColumns:
+  | {
+      token: boolean;
+      expiresAt: boolean;
+    }
+  | undefined;
 type InformationSchemaColumnRow = { column_name: string };
 type CompatibleQuotaUserRow = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  passwordHash: string;
+  projectBriefLimit: number;
+  resetPasswordTokenHash: string | null;
+  resetPasswordExpiresAt: Date | null;
+  role: AuthenticatedUser["role"];
+};
+type CompatibleAuthUserRow = {
   id: string;
   email: string;
   firstName: string;
@@ -84,6 +101,60 @@ async function getProjectBriefLimitColumn() {
   return cachedProjectBriefLimitColumn;
 }
 
+async function getResetPasswordColumns() {
+  if (cachedResetPasswordColumns !== undefined) {
+    return cachedResetPasswordColumns;
+  }
+
+  const columns = (await prisma.$queryRawUnsafe(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'User'
+        AND column_name IN ('resetPasswordTokenHash', 'resetPasswordExpiresAt')
+    `
+  )) as InformationSchemaColumnRow[];
+
+  cachedResetPasswordColumns = {
+    token: columns.some((column: InformationSchemaColumnRow) => column.column_name === "resetPasswordTokenHash"),
+    expiresAt: columns.some((column: InformationSchemaColumnRow) => column.column_name === "resetPasswordExpiresAt")
+  };
+
+  return cachedResetPasswordColumns;
+}
+
+async function getCompatibleAuthUserSelectSql() {
+  const [projectBriefLimitColumn, resetPasswordColumns] = await Promise.all([
+    getProjectBriefLimitColumn(),
+    getResetPasswordColumns()
+  ]);
+
+  const projectBriefLimitSelect = projectBriefLimitColumn
+    ? `"${projectBriefLimitColumn}"::int AS "projectBriefLimit"`
+    : `3::int AS "projectBriefLimit"`;
+  const resetPasswordTokenSelect = resetPasswordColumns.token
+    ? `"resetPasswordTokenHash"`
+    : `NULL::text AS "resetPasswordTokenHash"`;
+  const resetPasswordExpiresAtSelect = resetPasswordColumns.expiresAt
+    ? `"resetPasswordExpiresAt"`
+    : `NULL::timestamp AS "resetPasswordExpiresAt"`;
+
+  return `
+    SELECT
+      "id",
+      "email",
+      "firstName",
+      "lastName",
+      "passwordHash",
+      ${projectBriefLimitSelect},
+      ${resetPasswordTokenSelect},
+      ${resetPasswordExpiresAtSelect},
+      "role"
+    FROM "User"
+  `;
+}
+
 function mapCompatibleQuotaUser(user: {
   id: string;
   email: string;
@@ -107,17 +178,6 @@ function mapCompatibleQuotaUser(user: {
     role: user.role
   });
 }
-
-const authUserSelect = {
-  id: true,
-  email: true,
-  firstName: true,
-  lastName: true,
-  passwordHash: true,
-  resetPasswordTokenHash: true,
-  resetPasswordExpiresAt: true,
-  role: true
-} as const;
 
 const userClient = (prisma as PrismaClient & {
   user: {
@@ -180,28 +240,49 @@ const userClient = (prisma as PrismaClient & {
 
 export const userRepository = {
   async findByEmail(email: string) {
-    const user = await userClient.findUnique({
-      where: { email },
-      select: authUserSelect
-    });
+    const baseSelect = await getCompatibleAuthUserSelectSql();
+    const users = (await prisma.$queryRawUnsafe(
+      `
+        ${baseSelect}
+        WHERE "email" = $1
+        LIMIT 1
+      `,
+      email
+    )) as CompatibleAuthUserRow[];
 
-    return user ? mapUser(user) : null;
+    return users[0] ? mapCompatibleQuotaUser(users[0]) : null;
   },
   async findById(id: string) {
-    const user = await userClient.findUnique({
-      where: { id },
-      select: authUserSelect
-    });
+    const baseSelect = await getCompatibleAuthUserSelectSql();
+    const users = (await prisma.$queryRawUnsafe(
+      `
+        ${baseSelect}
+        WHERE "id" = $1
+        LIMIT 1
+      `,
+      id
+    )) as CompatibleAuthUserRow[];
 
-    return user ? mapUser(user) : null;
+    return users[0] ? mapCompatibleQuotaUser(users[0]) : null;
   },
   async findByResetPasswordTokenHash(resetPasswordTokenHash: string) {
-    const user = await userClient.findUnique({
-      where: { resetPasswordTokenHash },
-      select: authUserSelect
-    });
+    const resetPasswordColumns = await getResetPasswordColumns();
 
-    return user ? mapUser(user) : null;
+    if (!resetPasswordColumns.token) {
+      return null;
+    }
+
+    const baseSelect = await getCompatibleAuthUserSelectSql();
+    const users = (await prisma.$queryRawUnsafe(
+      `
+        ${baseSelect}
+        WHERE "resetPasswordTokenHash" = $1
+        LIMIT 1
+      `,
+      resetPasswordTokenHash
+    )) as CompatibleAuthUserRow[];
+
+    return users[0] ? mapCompatibleQuotaUser(users[0]) : null;
   },
   async findByNameOrEmail(nameOrEmail: string) {
     const normalizedLookup = normalizePersonLookup(nameOrEmail);
@@ -212,7 +293,16 @@ export const userRepository = {
 
     const users = await userClient.findMany({
       orderBy: [{ createdAt: "asc" }],
-      select: authUserSelect
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        passwordHash: true,
+        resetPasswordTokenHash: true,
+        resetPasswordExpiresAt: true,
+        role: true
+      }
     });
 
     const matchedUser = users.find((user: (typeof users)[number]) => {
@@ -240,7 +330,16 @@ export const userRepository = {
         passwordHash: input.passwordHash,
         role: input.role
       },
-      select: authUserSelect
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        passwordHash: true,
+        resetPasswordTokenHash: true,
+        resetPasswordExpiresAt: true,
+        role: true
+      }
     });
 
     return mapUser(createdUser);
@@ -284,7 +383,16 @@ export const userRepository = {
         firstName: input.firstName,
         lastName: input.lastName
       },
-      select: authUserSelect
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        passwordHash: true,
+        resetPasswordTokenHash: true,
+        resetPasswordExpiresAt: true,
+        role: true
+      }
     });
 
     return mapUser(updatedUser);
@@ -297,7 +405,16 @@ export const userRepository = {
         resetPasswordTokenHash: null,
         resetPasswordExpiresAt: null
       },
-      select: authUserSelect
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        passwordHash: true,
+        resetPasswordTokenHash: true,
+        resetPasswordExpiresAt: true,
+        role: true
+      }
     });
 
     return mapUser(updatedUser);
@@ -308,7 +425,16 @@ export const userRepository = {
     if (!projectBriefLimitColumn) {
       const existingUser = await userClient.findUnique({
         where: { id: userId },
-        select: authUserSelect
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          passwordHash: true,
+          resetPasswordTokenHash: true,
+          resetPasswordExpiresAt: true,
+          role: true
+        }
       });
 
       if (!existingUser) {
@@ -382,7 +508,16 @@ export const userRepository = {
         resetPasswordTokenHash: input.resetPasswordTokenHash,
         resetPasswordExpiresAt: input.resetPasswordExpiresAt
       },
-      select: authUserSelect
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        passwordHash: true,
+        resetPasswordTokenHash: true,
+        resetPasswordExpiresAt: true,
+        role: true
+      }
     });
 
     return mapUser(updatedUser);
