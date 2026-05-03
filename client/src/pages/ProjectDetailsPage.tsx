@@ -986,335 +986,335 @@ export function ProjectDetailsPage() {
             </Box>
           </Paper>
 
-          <Box
+          <Paper
+            elevation={0}
             sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.2fr) minmax(0, 0.95fr)" },
-              gap: 3
+              p: 3,
+              borderRadius: 4,
+              backgroundColor: "#FFFFFF",
+              boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
             }}
           >
-            <Paper
-              elevation={0}
-              sx={{
-                p: 3,
-                borderRadius: 4,
-                backgroundColor: "#FFFFFF",
-                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
-              }}
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              spacing={1.5}
+              sx={{ mb: 2.2 }}
             >
-              <Stack
-                direction={{ xs: "column", md: "row" }}
-                justifyContent="space-between"
-                alignItems={{ xs: "flex-start", md: "center" }}
-                spacing={1.5}
-                sx={{ mb: 2.2 }}
-              >
-                <Box sx={{ width: "100%" }}>
-                  <Typography
-                    sx={{
-                      fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                      fontSize: { xs: "1.45rem", md: "1.65rem" },
-                      fontWeight: 700,
-                      letterSpacing: -0.65,
-                      color: "#00342B"
-                    }}
-                  >
-                    Ask This Project
-                  </Typography>
-                  <Typography sx={{ mt: 0.6, fontSize: "0.9rem", lineHeight: 1.6, color: "#5A6A84" }}>
-                    Ask a grounded question over uploaded project documents and get a cited answer back.
-                  </Typography>
-                </Box>
-                <ButtonBase
-                  onClick={() => setAgentWorkspaceOpen(true)}
+              <Box sx={{ width: "100%" }}>
+                <Typography
                   sx={{
-                    px: 2.1,
-                    py: 1.05,
-                    borderRadius: 2.5,
-                    backgroundColor: "#E6F6FF",
+                    fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                    fontSize: { xs: "1.45rem", md: "1.75rem" },
+                    fontWeight: 700,
+                    letterSpacing: -0.65,
                     color: "#00342B"
                   }}
                 >
-                  <Typography sx={{ fontSize: "0.84rem", fontWeight: 700 }}>Open Agent Workspace</Typography>
-                </ButtonBase>
-              </Stack>
-
-              <Stack spacing={1.3} sx={{ width: "100%" }}>
-                <TextField
-                  value={projectQuestion}
-                  onChange={(event) => setProjectQuestion(event.target.value)}
-                  placeholder="What changed in this project that could affect the current budget or schedule?"
-                  multiline
-                  minRows={2}
-                  fullWidth
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: 3,
-                      backgroundColor: "#F9FCFF"
-                    }
-                  }}
-                />
-                <ButtonBase
-                  onClick={() => void handleAskProjectQuestion()}
-                  disabled={projectQuestionLoading}
-                  sx={{
-                    minWidth: 180,
-                    px: 2.2,
-                    py: 1.2,
-                    borderRadius: 3,
-                    backgroundColor: "#00342B",
-                    color: "#FFFFFF",
-                    alignSelf: "flex-start",
-                    opacity: projectQuestionLoading ? 0.65 : 1
-                  }}
-                >
-                  <Stack spacing={0.2} alignItems="flex-start">
-                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, letterSpacing: 1.1, textTransform: "uppercase" }}>
-                      {projectQuestionLoading ? "Thinking..." : "Ask Project"}
-                    </Typography>
-                    <Typography sx={{ fontSize: "0.74rem", color: "rgba(255,255,255,0.74)" }}>
-                      Grounded answer
-                    </Typography>
-                  </Stack>
-                </ButtonBase>
-              </Stack>
-
-              {projectQuestionError ? <Alert severity="warning" sx={{ mt: 2.2 }}>{projectQuestionError}</Alert> : null}
-
-              {projectQuestionAnswer ? (
-                <Paper
-                  elevation={0}
-                  sx={{
-                    mt: 2.4,
-                    p: 2.4,
-                    borderRadius: 3.5,
-                    backgroundColor: "#F9FCFF",
-                    border: "1px solid rgba(213,236,248,0.95)"
-                  }}
-                >
-                  <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.72, color: "#00342B" }}>
-                    {projectQuestionAnswer.answer}
-                  </Typography>
-                  <Stack spacing={1.2} sx={{ mt: 2 }}>
-                    {projectQuestionAnswer.citations.map((citation) => (
-                      <Paper
-                        key={`${citation.documentId}-${citation.chunkIndex}`}
-                        elevation={0}
-                        sx={{
-                          p: 1.8,
-                          borderRadius: 3,
-                          backgroundColor: "#FFFFFF",
-                          border: "1px solid rgba(213,236,248,0.82)"
-                        }}
-                      >
-                        <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
-                          {citation.documentTitle} • chunk {citation.chunkIndex + 1}
-                        </Typography>
-                        <Typography sx={{ mt: 0.75, fontSize: "0.86rem", lineHeight: 1.6, color: "#42536D" }}>
-                          {citation.excerpt}
-                        </Typography>
-                      </Paper>
-                    ))}
-                  </Stack>
-                </Paper>
-              ) : null}
-            </Paper>
-
-            <Paper
-              elevation={0}
-              sx={{
-                p: 4,
-                borderRadius: 4,
-                background: "linear-gradient(180deg, rgba(230,246,255,0.85) 0%, #FFFFFF 100%)",
-                boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
-              }}
-            >
-              <Stack
-                direction={{ xs: "column", md: "row" }}
-                justifyContent="space-between"
-                alignItems={{ xs: "flex-start", md: "center" }}
-                spacing={2}
-                sx={{ mb: 3 }}
+                  Ask This Project
+                </Typography>
+                <Typography sx={{ mt: 0.6, fontSize: "0.92rem", lineHeight: 1.6, color: "#5A6A84" }}>
+                  Ask a grounded question over uploaded project documents and get a cited answer back.
+                </Typography>
+              </Box>
+              <ButtonBase
+                onClick={() => setAgentWorkspaceOpen(true)}
+                sx={{
+                  px: 2.1,
+                  py: 1.05,
+                  borderRadius: 2.5,
+                  backgroundColor: "#E6F6FF",
+                  color: "#00342B"
+                }}
               >
-                <Box>
-                  <Stack direction="row" spacing={1.2} alignItems="center">
-                    <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
-                    <Typography
-                      sx={{
-                        fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
-                        fontSize: "1.7rem",
-                        fontWeight: 700,
-                        letterSpacing: -0.75,
-                        color: "#00342B"
-                      }}
-                    >
-                      Project Analytics Brief
-                    </Typography>
-                  </Stack>
-                  <Typography sx={{ mt: 1, fontSize: "1rem", color: "#5A6A84" }}>
-                    Generate a quick operational readout of what is happening now, what has progressed, and what needs attention.
+                <Typography sx={{ fontSize: "0.84rem", fontWeight: 700 }}>Open Agent Workspace</Typography>
+              </ButtonBase>
+            </Stack>
+
+            <Stack spacing={1.3} sx={{ width: "100%" }}>
+              <TextField
+                value={projectQuestion}
+                onChange={(event) => setProjectQuestion(event.target.value)}
+                placeholder="What changed in this project that could affect the current budget or schedule?"
+                multiline
+                minRows={2}
+                fullWidth
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    backgroundColor: "#F9FCFF"
+                  }
+                }}
+              />
+              <ButtonBase
+                onClick={() => void handleAskProjectQuestion()}
+                disabled={projectQuestionLoading}
+                sx={{
+                  minWidth: 180,
+                  px: 2.2,
+                  py: 1.2,
+                  borderRadius: 3,
+                  backgroundColor: "#00342B",
+                  color: "#FFFFFF",
+                  alignSelf: "flex-start",
+                  opacity: projectQuestionLoading ? 0.65 : 1
+                }}
+              >
+                <Stack spacing={0.2} alignItems="flex-start">
+                  <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, letterSpacing: 1.1, textTransform: "uppercase" }}>
+                    {projectQuestionLoading ? "Thinking..." : "Ask Project"}
                   </Typography>
-                </Box>
-                <ButtonBase
-                  onClick={handleGenerateBrief}
-                  disabled={briefLoading}
-                  sx={{
-                    minWidth: 118,
-                    px: 1.8,
-                    py: 1.15,
-                    borderRadius: 2.5,
-                    backgroundColor: "#00342B",
-                    color: "#FFFFFF",
-                    opacity: briefLoading ? 0.72 : 1
-                  }}
-                >
-                  <Stack direction="row" spacing={0.9} alignItems="center">
-                    <AutoAwesomeRoundedIcon sx={{ fontSize: 17 }} />
-                    <Typography
+                  <Typography sx={{ fontSize: "0.74rem", color: "rgba(255,255,255,0.74)" }}>
+                    Grounded answer
+                  </Typography>
+                </Stack>
+              </ButtonBase>
+            </Stack>
+
+            {projectQuestionError ? <Alert severity="warning" sx={{ mt: 2.2 }}>{projectQuestionError}</Alert> : null}
+
+            {projectQuestionAnswer ? (
+              <Paper
+                elevation={0}
+                sx={{
+                  mt: 2.4,
+                  p: 2.4,
+                  borderRadius: 3.5,
+                  backgroundColor: "#F9FCFF",
+                  border: "1px solid rgba(213,236,248,0.95)"
+                }}
+              >
+                <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.72, color: "#00342B" }}>
+                  {projectQuestionAnswer.answer}
+                </Typography>
+                <Stack spacing={1.2} sx={{ mt: 2 }}>
+                  {projectQuestionAnswer.citations.map((citation) => (
+                    <Paper
+                      key={`${citation.documentId}-${citation.chunkIndex}`}
+                      elevation={0}
                       sx={{
-                        fontSize: "0.78rem",
-                        fontWeight: 800,
-                        lineHeight: 1.02,
-                        textAlign: "left"
+                        p: 1.8,
+                        borderRadius: 3,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.82)"
                       }}
                     >
-                      <Box component="span" sx={{ display: "block" }}>
-                        {briefLoading ? "Generating" : projectBrief ? "Refresh" : "Generate"}
-                      </Box>
-                      <Box component="span" sx={{ display: "block" }}>
-                        Brief
-                      </Box>
-                    </Typography>
-                  </Stack>
-                </ButtonBase>
-              </Stack>
-
-              {briefError ? (
-                <Alert severity="warning" sx={{ mb: 3 }}>
-                  {briefError}
-                </Alert>
-              ) : null}
-
-              {projectBrief ? (
-                <Stack spacing={3}>
-                  <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
-                    <Box
-                      sx={{
-                        px: 1.4,
-                        py: 0.7,
-                        borderRadius: 999,
-                        backgroundColor: projectBrief.source === "claude" ? "#9DEFDE" : "#CFE6F2",
-                        color: projectBrief.source === "claude" ? "#0F6F62" : "#3F4945"
-                      }}
-                    >
-                      <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.3, textTransform: "uppercase" }}>
-                        {projectBrief.source === "claude" ? "Claude Insight" : "Local Insight"}
+                      <Typography sx={{ fontSize: "0.78rem", fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#93A6C3" }}>
+                        {citation.documentTitle} • chunk {citation.chunkIndex + 1}
                       </Typography>
-                    </Box>
-                    <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
-                      Generated {formatDateTime(projectBrief.generatedAt)}
-                    </Typography>
-                    <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
-                      Your daily quota: {projectBrief.usage.userUsed}/{projectBrief.usage.userLimit}
-                    </Typography>
-                    <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
-                      Workspace pool: {projectBrief.usage.globalUsed}/{projectBrief.usage.globalLimit}
-                    </Typography>
-                  </Stack>
+                      <Typography sx={{ mt: 0.75, fontSize: "0.86rem", lineHeight: 1.6, color: "#42536D" }}>
+                        {citation.excerpt}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            ) : null}
+          </Paper>
 
-                  <Typography sx={{ fontSize: "1.08rem", lineHeight: 1.7, color: "#42536D" }}>
-                    {projectBrief.summary}
-                  </Typography>
-
-                  <Box
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              background: "linear-gradient(180deg, rgba(230,246,255,0.85) 0%, #FFFFFF 100%)",
+              boxShadow: "0 10px 24px rgba(7,30,39,0.035)"
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              spacing={2}
+              sx={{ mb: 3 }}
+            >
+              <Box>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                  <AutoAwesomeRoundedIcon sx={{ color: "#046B5E" }} />
+                  <Typography
                     sx={{
-                      display: "grid",
-                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                      gap: 2.2
+                      fontFamily: '"Epilogue", "Space Grotesk", sans-serif',
+                      fontSize: "1.7rem",
+                      fontWeight: 700,
+                      letterSpacing: -0.75,
+                      color: "#00342B"
                     }}
                   >
-                    {[
-                      { title: "Current State", items: projectBrief.currentState, tone: "#E6F6FF" },
-                      { title: "Recent Progress", items: projectBrief.recentProgress, tone: "#FFFFFF" },
-                      { title: "Next Steps", items: projectBrief.nextSteps, tone: "#FFFFFF" },
-                      { title: "Watchouts", items: projectBrief.watchouts, tone: "#FFFAF8" }
-                    ].map((section) => (
-                      <Paper
-                        key={section.title}
-                        elevation={0}
-                        sx={{
-                          p: 2.4,
-                          borderRadius: 3.5,
-                          backgroundColor: section.tone,
-                          border: "1px solid rgba(213,236,248,0.8)"
-                        }}
-                      >
-                        <Typography
-                          sx={{
-                            mb: 1.6,
-                            fontSize: "0.78rem",
-                            fontWeight: 900,
-                            letterSpacing: 1.7,
-                            textTransform: "uppercase",
-                            color: "#93A6C3"
-                          }}
-                        >
-                          {section.title}
-                        </Typography>
-                        <Stack spacing={1.1}>
-                          {section.items.map((item) => (
-                            <Stack key={item} direction="row" spacing={1.1} alignItems="flex-start">
-                              <Box
-                                sx={{
-                                  width: 7,
-                                  height: 7,
-                                  mt: 0.9,
-                                  borderRadius: "50%",
-                                  backgroundColor: "#046B5E",
-                                  flexShrink: 0
-                                }}
-                              />
-                              <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.6, color: "#42536D" }}>
-                                {item}
-                              </Typography>
-                            </Stack>
-                          ))}
-                        </Stack>
-                      </Paper>
-                    ))}
-                  </Box>
+                    Project Analytics Brief
+                  </Typography>
                 </Stack>
-              ) : (
-                <Stack
-                  spacing={2}
+                <Typography sx={{ mt: 1, fontSize: "1rem", color: "#5A6A84" }}>
+                  Generate a quick operational readout of what is happening now, what has progressed, and what needs attention.
+                </Typography>
+              </Box>
+              <ButtonBase
+                onClick={handleGenerateBrief}
+                disabled={briefLoading}
+                sx={{
+                  minWidth: 118,
+                  px: 1.8,
+                  py: 1.15,
+                  borderRadius: 2.5,
+                  backgroundColor: "#00342B",
+                  color: "#FFFFFF",
+                  opacity: briefLoading ? 0.72 : 1
+                }}
+              >
+                <Stack direction="row" spacing={0.9} alignItems="center">
+                  <AutoAwesomeRoundedIcon sx={{ fontSize: 17 }} />
+                  <Typography
+                    sx={{
+                      fontSize: "0.78rem",
+                      fontWeight: 800,
+                      lineHeight: 1.02,
+                      textAlign: "left"
+                    }}
+                  >
+                    <Box component="span" sx={{ display: "block" }}>
+                      {briefLoading ? "Generating" : projectBrief ? "Refresh" : "Generate"}
+                    </Box>
+                    <Box component="span" sx={{ display: "block" }}>
+                      Brief
+                    </Box>
+                  </Typography>
+                </Stack>
+              </ButtonBase>
+            </Stack>
+
+            {briefError ? (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                {briefError}
+              </Alert>
+            ) : null}
+
+            {projectBrief ? (
+              <Stack spacing={3}>
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap" alignItems="center">
+                  <Box
+                    sx={{
+                      px: 1.4,
+                      py: 0.7,
+                      borderRadius: 999,
+                      backgroundColor: projectBrief.source === "claude" ? "#9DEFDE" : "#CFE6F2",
+                      color: projectBrief.source === "claude" ? "#0F6F62" : "#3F4945"
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.3, textTransform: "uppercase" }}>
+                      {projectBrief.source === "claude" ? "Claude Insight" : "Local Insight"}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                    Generated {formatDateTime(projectBrief.generatedAt)}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                    Your daily quota: {projectBrief.usage.userUsed}/{projectBrief.usage.userLimit}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.84rem", color: "#93A6C3" }}>
+                    Workspace pool: {projectBrief.usage.globalUsed}/{projectBrief.usage.globalLimit}
+                  </Typography>
+                </Stack>
+
+                <Typography sx={{ fontSize: "1.08rem", lineHeight: 1.7, color: "#42536D" }}>
+                  {projectBrief.summary}
+                </Typography>
+
+                <Box
                   sx={{
-                    px: { xs: 0, md: 1 },
-                    py: { xs: 1, md: 2 }
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    gap: 2.2
                   }}
                 >
-                  <Typography sx={{ fontSize: "1rem", lineHeight: 1.7, color: "#5A6A84", maxWidth: 760 }}>
-                    This uses the live project record, related change orders, on-site team, and document vault to generate a quick briefing a PM can act on immediately.
-                  </Typography>
-                  <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
-                    {["Current state", "Recent progress", "Next steps", "Watchouts"].map((item) => (
-                      <Box
-                        key={item}
+                  {[
+                    { title: "Current State", items: projectBrief.currentState, tone: "#E6F6FF" },
+                    { title: "Recent Progress", items: projectBrief.recentProgress, tone: "#FFFFFF" },
+                    { title: "Next Steps", items: projectBrief.nextSteps, tone: "#FFFFFF" },
+                    { title: "Watchouts", items: projectBrief.watchouts, tone: "#FFFAF8" }
+                  ].map((section) => (
+                    <Paper
+                      key={section.title}
+                      elevation={0}
+                      sx={{
+                        p: 2.4,
+                        borderRadius: 3.5,
+                        backgroundColor: section.tone,
+                        border: "1px solid rgba(213,236,248,0.8)"
+                      }}
+                    >
+                      <Typography
                         sx={{
-                          px: 1.4,
-                          py: 0.8,
-                          borderRadius: 999,
-                          backgroundColor: "#FFFFFF",
-                          border: "1px solid rgba(213,236,248,0.95)"
+                          mb: 1.6,
+                          fontSize: "0.78rem",
+                          fontWeight: 900,
+                          letterSpacing: 1.7,
+                          textTransform: "uppercase",
+                          color: "#93A6C3"
                         }}
                       >
-                        <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, color: "#42536D" }}>{item}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
+                        {section.title}
+                      </Typography>
+                      <Stack spacing={1.1}>
+                        {section.items.map((item) => (
+                          <Stack key={item} direction="row" spacing={1.1} alignItems="flex-start">
+                            <Box
+                              sx={{
+                                width: 7,
+                                height: 7,
+                                mt: 0.9,
+                                borderRadius: "50%",
+                                backgroundColor: "#046B5E",
+                                flexShrink: 0
+                              }}
+                            />
+                            <Typography sx={{ fontSize: "0.96rem", lineHeight: 1.6, color: "#42536D" }}>
+                              {item}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Box>
+              </Stack>
+            ) : (
+              <Stack
+                spacing={2}
+                sx={{
+                  px: { xs: 0, md: 1 },
+                  py: { xs: 1, md: 2 }
+                }}
+              >
+                <Typography sx={{ fontSize: "1rem", lineHeight: 1.7, color: "#5A6A84" }}>
+                  This uses the live project record, related change orders, on-site team, and document vault to generate a quick briefing a PM can act on immediately.
+                </Typography>
+                <Stack direction="row" spacing={1.2} useFlexGap flexWrap="wrap">
+                  {["Current state", "Recent progress", "Next steps", "Watchouts"].map((item) => (
+                    <Box
+                      key={item}
+                      sx={{
+                        px: 1.4,
+                        py: 0.8,
+                        borderRadius: 999,
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid rgba(213,236,248,0.95)"
+                      }}
+                    >
+                      <Typography sx={{ fontSize: "0.82rem", fontWeight: 800, color: "#42536D" }}>{item}</Typography>
+                    </Box>
+                  ))}
                 </Stack>
-              )}
-            </Paper>
+              </Stack>
+            )}
+          </Paper>
 
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.15fr) minmax(0, 0.85fr)" },
+              gap: 3
+            }}
+          >
             <Paper
               elevation={0}
               sx={{

@@ -21,6 +21,27 @@ const documentChunkClient = (prisma as unknown as {
   $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
 }).documentChunk;
 
+function isMissingEmbeddingWriteShape(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("Unknown argument `embeddingJson`") ||
+    message.includes("Unknown argument `embeddingModel`") ||
+    message.includes('column "embeddingJson" does not exist') ||
+    message.includes('column "embeddingModel" does not exist')
+  );
+}
+
+function isMissingEmbeddingUpdateShape(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes('column "embeddingJson" does not exist') ||
+    message.includes('column "embeddingModel" does not exist') ||
+    message.includes('relation "DocumentChunk" does not exist')
+  );
+}
+
 function mapDocumentChunk(row: DocumentChunkRow): DocumentChunkRecord {
   return {
     id: row.id,
@@ -50,16 +71,33 @@ export const documentChunkRepository = {
       return;
     }
 
-    await documentChunkClient.createMany({
-      data: chunks.map((chunk) => ({
-        projectId,
-        documentId,
-        chunkIndex: chunk.chunkIndex,
-        content: chunk.content,
-        embeddingJson: chunk.embedding ? JSON.stringify(chunk.embedding) : null,
-        embeddingModel: chunk.embeddingModel ?? null
-      }))
-    });
+    const baseRows = chunks.map((chunk) => ({
+      projectId,
+      documentId,
+      chunkIndex: chunk.chunkIndex,
+      content: chunk.content
+    }));
+
+    try {
+      await documentChunkClient.createMany({
+        data: chunks.map((chunk) => ({
+          projectId,
+          documentId,
+          chunkIndex: chunk.chunkIndex,
+          content: chunk.content,
+          embeddingJson: chunk.embedding ? JSON.stringify(chunk.embedding) : null,
+          embeddingModel: chunk.embeddingModel ?? null
+        }))
+      });
+    } catch (error) {
+      if (!isMissingEmbeddingWriteShape(error)) {
+        throw error;
+      }
+
+      await documentChunkClient.createMany({
+        data: baseRows
+      });
+    }
   },
   async listByProject(projectId: string) {
     const rows = await documentChunkClient.findMany({
@@ -81,18 +119,24 @@ export const documentChunkRepository = {
     documentId: string,
     chunks: Array<{ chunkIndex: number; embedding?: number[]; embeddingModel?: string }>
   ) {
-    await Promise.all(
-      chunks.map((chunk) =>
-        (prisma as unknown as {
-          $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
-        }).$executeRawUnsafe(
-          'UPDATE "DocumentChunk" SET "embeddingJson" = $1, "embeddingModel" = $2, "updatedAt" = CURRENT_TIMESTAMP WHERE "documentId" = $3 AND "chunkIndex" = $4',
-          chunk.embedding ? JSON.stringify(chunk.embedding) : null,
-          chunk.embeddingModel ?? null,
-          documentId,
-          chunk.chunkIndex
+    try {
+      await Promise.all(
+        chunks.map((chunk) =>
+          (prisma as unknown as {
+            $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
+          }).$executeRawUnsafe(
+            'UPDATE "DocumentChunk" SET "embeddingJson" = $1, "embeddingModel" = $2, "updatedAt" = CURRENT_TIMESTAMP WHERE "documentId" = $3 AND "chunkIndex" = $4',
+            chunk.embedding ? JSON.stringify(chunk.embedding) : null,
+            chunk.embeddingModel ?? null,
+            documentId,
+            chunk.chunkIndex
+          )
         )
-      )
-    );
+      );
+    } catch (error) {
+      if (!isMissingEmbeddingUpdateShape(error)) {
+        throw error;
+      }
+    }
   }
 };
